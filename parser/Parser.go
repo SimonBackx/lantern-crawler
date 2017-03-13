@@ -38,6 +38,15 @@ func Parse(reader io.Reader, parsers []IParser) (*ParseResult, error) {
 	return result, nil
 }
 
+func NodeAttr(node *html.Node, attrName string) *string {
+	for _, attr := range node.Attr {
+		if attr.Key == attrName {
+			return &attr.Val
+		}
+	}
+	return nil
+}
+
 func NodeToText(node *html.Node) string {
 	var buffer bytes.Buffer
 	next := node.FirstChild
