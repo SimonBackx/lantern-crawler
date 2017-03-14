@@ -5,13 +5,12 @@ import (
 )
 
 type CrawlItem struct {
-	URL     *url.URL
-	Method  string
-	Body    *string
-	Website *Website
-	Next    *CrawlItem
+	URL    *url.URL
+	Method string
+	Body   *string
+	Next   *CrawlItem
 }
 
-func NewCrawlItem(URL *url.URL, Website *Website) *CrawlItem {
-	return &CrawlItem{URL: URL, Website: Website}
+func NewCrawlItem(URL *url.URL) *CrawlItem {
+	return &CrawlItem{URL: URL}
 }

@@ -7,16 +7,20 @@ import (
 	"github.com/SimonBackx/master-project/parser"
 	"golang.org/x/net/proxy"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 )
 
 type Crawler struct {
-	cfg       *config.CrawlerConfig
-	transport *http.Transport
-	client    *http.Client
-	Queue     *CrawlItem
-	QueueTail *CrawlItem
+	cfg            *config.CrawlerConfig
+	transport      *http.Transport
+	client         *http.Client
+	DomainCrawlers map[string]*DomainCrawler
+
+	ResumeChannel chan bool
 }
 
 func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
@@ -28,40 +32,72 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 	}
 
 	transport := &http.Transport{Dial: torDialer.Dial}
-	client := &http.Client{Transport: transport}
+	client := &http.Client{Transport: transport, Timeout: time.Second * 10}
 
-	return &Crawler{cfg: cfg, client: client, transport: transport}
+	return &Crawler{cfg: cfg, client: client, transport: transport, DomainCrawlers: make(map[string]*DomainCrawler), ResumeChannel: make(chan bool, 1)}
 }
 
-func (crawler *Crawler) Pop() {
-	if crawler.Queue == nil {
+func (crawler *Crawler) AddDomain(domainCrawler *DomainCrawler) {
+	crawler.DomainCrawlers[domainCrawler.Website.URL] = domainCrawler
+}
+
+func (crawler *Crawler) ProcessUrl(url *url.URL) {
+	if url == nil || crawler == nil {
 		return
 	}
+	// Is deze URL één van onze domain crawlers?
 
-	crawler.Queue = crawler.Queue.Next
-	if crawler.Queue == nil {
-		crawler.QueueTail = nil
+	domain := url.Hostname()
+	domainCrawler := crawler.DomainCrawlers[domain]
+
+	if domainCrawler != nil {
+		domainCrawler.Mutex.Lock()
+		domainCrawler.Queue.Push(NewCrawlItem(url))
+		domainCrawler.Mutex.Unlock()
+	} else {
+		// todo: deze url ergens heen sturen voor latere verwerking
 	}
 }
 
-func (crawler *Crawler) Push(item *CrawlItem) {
-	if crawler.Queue == nil {
-		crawler.Queue = item
-		crawler.QueueTail = item
-		return
+func (crawler *Crawler) Wake() {
+	select {
+	case crawler.ResumeChannel <- true:
+		fmt.Println("Waked!")
+	default:
+		fmt.Println("Not waking, already awake.")
 	}
-	crawler.QueueTail.Next = item
 }
 
-func (crawler *Crawler) Crawl() {
-	// Todo: block for concurrency
-	item := crawler.Queue
+func (crawler *Crawler) Start() {
+	for {
 
-	if item == nil {
-		crawler.cfg.LogError(&CrawlError{"Queue is empty"})
-		return
+		fmt.Println("Loop start - unblocked")
+		for _, domainCrawler := range crawler.DomainCrawlers {
+			// Kunnen we nog een request uitvoeren?
+			// ActiveRequests wordt enkel single threated vanuit deze goroutine aangeroepen.
+
+			for {
+				if item := domainCrawler.HasItemAvailable(); item != nil {
+					go crawler.Crawl(item, domainCrawler)
+				} else {
+					break
+				}
+			}
+		}
+
+		fmt.Println("Loop end -  blocking")
+		// We hebben alles gestart wat we konden starten.
+		// Nu wachten we tot er iets aan de situatie veranderd is
+		<-crawler.ResumeChannel
 	}
-	crawler.Pop()
+}
+
+func (crawler *Crawler) Crawl(item *CrawlItem, domainCrawler *DomainCrawler) {
+	defer func() {
+		domainCrawler.DecreaseActiveRequests()
+		time.Sleep(2 * time.Second)
+		crawler.Wake()
+	}()
 
 	var reader io.Reader
 	if item.Body != nil {
@@ -71,9 +107,18 @@ func (crawler *Crawler) Crawl() {
 
 	if request, err := http.NewRequest(item.Method, item.URL.String(), reader); err == nil {
 		if response, err := crawler.client.Do(request); err == nil {
-			crawler.ProcessResponse(item, response.Request, response)
-
+			crawler.ProcessResponse(item, domainCrawler, response.Request, response)
 		} else {
+			if urlErr, ok := err.(*url.Error); ok {
+				if netOpErr, ok := urlErr.Err.(*net.OpError); ok && netOpErr.Timeout() {
+					fmt.Println("Yep, it was a timeout")
+				} else {
+				}
+			} else {
+				fmt.Println("Unknown error", err)
+			}
+
+			fmt.Printf("%v, %T\n", err, err)
 			crawler.cfg.LogError(err)
 		}
 	} else {
@@ -81,23 +126,24 @@ func (crawler *Crawler) Crawl() {
 	}
 }
 
-func printHeader(header *http.Header) {
+func PrintHeader(header *http.Header) {
 	buffer := bytes.NewBufferString("")
 	header.Write(buffer)
 	fmt.Println(buffer.String())
 }
 
-func (crawler *Crawler) ProcessResponse(item *CrawlItem, request *http.Request, response *http.Response) {
-	fmt.Println("Request headers:")
-	printHeader(&request.Header)
+func (crawler *Crawler) ProcessResponse(item *CrawlItem, domainCrawler *DomainCrawler, request *http.Request, response *http.Response) {
+	defer response.Body.Close()
+
+	/*fmt.Println("Request headers:")
+	PrintHeader(&request.Header)*/
 	fmt.Println("Response:", item.URL.String())
-	fmt.Println("Status:", response.Status)
+	//fmt.Println("Status:", response.Status)
 	//fmt.Println("Response headers:")
 	//printHeader(&response.Header)
 
 	// Doorgeven aan parser
-	result, err := parser.Parse(response.Body, item.Website.GetParsers(request.URL))
-	response.Body.Close()
+	result, err := parser.Parse(response.Body, domainCrawler.Website.GetParsers(request.URL))
 
 	if err != nil {
 		crawler.cfg.LogError(err)
@@ -105,23 +151,19 @@ func (crawler *Crawler) ProcessResponse(item *CrawlItem, request *http.Request, 
 	}
 
 	if result.Listing != nil {
-		result.Listing.Print()
+		//result.Listing.Print()
 	} else {
-		fmt.Println("No listing found")
+		//fmt.Println("No listing found")
 	}
 
 	if result.Links != nil {
-		parser.PrintLinks(result.Links)
-
 		for _, link := range result.Links {
+			// Convert links to absolute url
 			abs := request.URL.ResolveReference(&link.Href)
-			web := GetWebsiteForDomain(abs.Hostname())
-			newItem := NewCrawlItem(abs, web)
-			crawler.Push(newItem)
+			crawler.ProcessUrl(abs)
 		}
-		// Alle links converteren naar juist
 	} else {
-		fmt.Println("No links found")
+		//fmt.Println("No links found")
 	}
-	fmt.Println("")
+	//fmt.Println("")
 }
