@@ -1,7 +1,6 @@
 package crawler
 
 import (
-	"fmt"
 	"github.com/deckarep/golang-set"
 	"sync"
 )
@@ -28,7 +27,7 @@ func (domainCrawler *DomainCrawler) HasItemAvailable() *CrawlItem {
 	domainCrawler.Mutex.Lock()
 	defer domainCrawler.Mutex.Unlock()
 
-	if domainCrawler.Queue.IsEmpty() || domainCrawler.ActiveRequests >= 10 {
+	if domainCrawler.Queue.IsEmpty() || domainCrawler.ActiveRequests >= domainCrawler.Website.MaxRequests {
 		return nil
 	}
 

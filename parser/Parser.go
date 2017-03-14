@@ -2,7 +2,6 @@ package parser
 
 import (
 	"bytes"
-	"errors"
 	"golang.org/x/net/html"
 	"io"
 	"regexp"
@@ -11,6 +10,14 @@ import (
 
 func byteArrayToString(b []byte) string {
 	return strings.TrimSpace(string(b))
+}
+
+type ParseError struct {
+	msg string
+}
+
+func (e ParseError) Error() string {
+	return e.msg
 }
 
 // Momenteel nog geen return value, dat is voor later
@@ -31,8 +38,7 @@ func Parse(reader io.Reader, parsers []IParser) (*ParseResult, error) {
 
 	for _, parser := range parsers {
 		if !parser.MatchDocument(htmlDoc, result) {
-			// fout!
-			return nil, errors.New("Error in parsing")
+			return nil, ParseError{"Error in parsing"}
 		}
 	}
 	return result, nil

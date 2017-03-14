@@ -31,8 +31,10 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 		return nil
 	}
 
-	transport := &http.Transport{Dial: torDialer.Dial}
-	client := &http.Client{Transport: transport, Timeout: time.Second * 5}
+	transport := &http.Transport{
+		Dial: torDialer.Dial,
+	}
+	client := &http.Client{Transport: transport, Timeout: time.Second * 10}
 
 	return &Crawler{cfg: cfg, client: client, transport: transport, DomainCrawlers: make(map[string]*DomainCrawler), ResumeChannel: make(chan bool, 1)}
 }
@@ -44,16 +46,16 @@ func (crawler *Crawler) AddDomain(domainCrawler *DomainCrawler) {
 func (crawler *Crawler) Wake() {
 	select {
 	case crawler.ResumeChannel <- true:
-		fmt.Println("Waked!")
+		//fmt.Println("Waked!")
 	default:
-		fmt.Println("Not waking, already awake.")
+		//fmt.Println("Not waking, already awake.")
 	}
 }
 
 func (crawler *Crawler) Start() {
 	for {
 
-		fmt.Println("Loop start - unblocked")
+		//fmt.Println("Loop start - unblocked")
 		for _, domainCrawler := range crawler.DomainCrawlers {
 			// Kunnen we nog een request uitvoeren?
 			// ActiveRequests wordt enkel single threated vanuit deze goroutine aangeroepen.
@@ -67,7 +69,7 @@ func (crawler *Crawler) Start() {
 			}
 		}
 
-		fmt.Println("Loop end -  blocking")
+		//fmt.Println("Loop end -  blocking")
 		// We hebben alles gestart wat we konden starten.
 		// Nu wachten we tot er iets aan de situatie veranderd is
 		<-crawler.ResumeChannel
@@ -77,7 +79,7 @@ func (crawler *Crawler) Start() {
 func (crawler *Crawler) Crawl(item *CrawlItem, domainCrawler *DomainCrawler) {
 	defer func() {
 		domainCrawler.DecreaseActiveRequests()
-		//time.Sleep(2 * time.Second)
+		time.Sleep(2 * time.Second)
 		crawler.Wake()
 	}()
 
@@ -131,21 +133,25 @@ func (crawler *Crawler) ProcessResponse(item *CrawlItem, domainCrawler *DomainCr
 	result, err := parser.Parse(response.Body, domainCrawler.Website.GetParsers(urlRef))
 
 	if err != nil {
-		crawler.cfg.LogError(err)
+		// Deze error is voornamelijk
+		if _, ok := err.(parser.ParseError); ok {
+			crawler.cfg.LogError(err)
+		} else {
+			fmt.Println("Error: not valid html or too long body")
+			crawler.cfg.LogError(err)
+		}
+
 		return
 	}
 
 	if result.Listing != nil {
-		//result.Listing.Print()
+		result.Listing.Print()
 	} else {
 		//fmt.Println("No listing found")
 	}
 
 	if result.Links != nil {
 		for _, link := range result.Links {
-			if link == nil {
-				panic("link is nil")
-			}
 			// Convert links to absolute url
 			abs := urlRef.ResolveReference(&link.Href)
 			crawler.ProcessUrl(abs)

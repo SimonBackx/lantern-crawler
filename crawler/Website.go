@@ -10,9 +10,7 @@ type Website struct {
 	Name            string
 	URL             string
 	RunningRequests int
-	Paused          bool
-
-	FailedRequests int // Aantal mislukte requests
+	MaxRequests     int
 
 	ListingConfiguration *parser.ListingConfiguration // Kan nil zijn
 	ListingRegexp        *regexp.Regexp               // Kan nil zijn
