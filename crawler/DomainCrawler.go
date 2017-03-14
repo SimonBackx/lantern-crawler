@@ -20,10 +20,8 @@ func NewDomainCrawler(website *Website) *DomainCrawler {
 
 func (domainCrawler *DomainCrawler) DecreaseActiveRequests() {
 	domainCrawler.Mutex.Lock()
-	defer domainCrawler.Mutex.Unlock()
-
 	domainCrawler.ActiveRequests--
-	fmt.Println("Active Requests:", domainCrawler.ActiveRequests)
+	domainCrawler.Mutex.Unlock()
 }
 
 func (domainCrawler *DomainCrawler) HasItemAvailable() *CrawlItem {

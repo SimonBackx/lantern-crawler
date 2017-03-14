@@ -32,7 +32,7 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 	}
 
 	transport := &http.Transport{Dial: torDialer.Dial}
-	client := &http.Client{Transport: transport, Timeout: time.Second * 10}
+	client := &http.Client{Transport: transport, Timeout: time.Second * 5}
 
 	return &Crawler{cfg: cfg, client: client, transport: transport, DomainCrawlers: make(map[string]*DomainCrawler), ResumeChannel: make(chan bool, 1)}
 }
