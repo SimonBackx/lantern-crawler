@@ -41,24 +41,6 @@ func (crawler *Crawler) AddDomain(domainCrawler *DomainCrawler) {
 	crawler.DomainCrawlers[domainCrawler.Website.URL] = domainCrawler
 }
 
-func (crawler *Crawler) ProcessUrl(url *url.URL) {
-	if url == nil || crawler == nil {
-		return
-	}
-	// Is deze URL één van onze domain crawlers?
-
-	domain := url.Hostname()
-	domainCrawler := crawler.DomainCrawlers[domain]
-
-	if domainCrawler != nil {
-		domainCrawler.Mutex.Lock()
-		domainCrawler.Queue.Push(NewCrawlItem(url))
-		domainCrawler.Mutex.Unlock()
-	} else {
-		// todo: deze url ergens heen sturen voor latere verwerking
-	}
-}
-
 func (crawler *Crawler) Wake() {
 	select {
 	case crawler.ResumeChannel <- true:
@@ -95,7 +77,7 @@ func (crawler *Crawler) Start() {
 func (crawler *Crawler) Crawl(item *CrawlItem, domainCrawler *DomainCrawler) {
 	defer func() {
 		domainCrawler.DecreaseActiveRequests()
-		time.Sleep(2 * time.Second)
+		//time.Sleep(2 * time.Second)
 		crawler.Wake()
 	}()
 
@@ -106,16 +88,17 @@ func (crawler *Crawler) Crawl(item *CrawlItem, domainCrawler *DomainCrawler) {
 	fmt.Println("Request:", item.URL.String())
 
 	if request, err := http.NewRequest(item.Method, item.URL.String(), reader); err == nil {
+		request.Header.Add("Accept", "text/html")
 		if response, err := crawler.client.Do(request); err == nil {
 			crawler.ProcessResponse(item, domainCrawler, response.Request, response)
 		} else {
 			if urlErr, ok := err.(*url.Error); ok {
 				if netOpErr, ok := urlErr.Err.(*net.OpError); ok && netOpErr.Timeout() {
-					fmt.Println("Yep, it was a timeout")
+					fmt.Println("Timeout: ", item.URL.String())
 				} else {
 				}
 			} else {
-				fmt.Println("Unknown error", err)
+				fmt.Println("Unknown error: ", err, item.URL.String())
 			}
 
 			fmt.Printf("%v, %T\n", err, err)
@@ -141,9 +124,11 @@ func (crawler *Crawler) ProcessResponse(item *CrawlItem, domainCrawler *DomainCr
 	//fmt.Println("Status:", response.Status)
 	//fmt.Println("Response headers:")
 	//printHeader(&response.Header)
+	url := *request.URL
+	urlRef := &url
 
 	// Doorgeven aan parser
-	result, err := parser.Parse(response.Body, domainCrawler.Website.GetParsers(request.URL))
+	result, err := parser.Parse(response.Body, domainCrawler.Website.GetParsers(urlRef))
 
 	if err != nil {
 		crawler.cfg.LogError(err)
@@ -158,12 +143,31 @@ func (crawler *Crawler) ProcessResponse(item *CrawlItem, domainCrawler *DomainCr
 
 	if result.Links != nil {
 		for _, link := range result.Links {
+			if link == nil {
+				panic("link is nil")
+			}
 			// Convert links to absolute url
-			abs := request.URL.ResolveReference(&link.Href)
+			abs := urlRef.ResolveReference(&link.Href)
 			crawler.ProcessUrl(abs)
 		}
 	} else {
 		//fmt.Println("No links found")
 	}
 	//fmt.Println("")
+}
+
+func (crawler *Crawler) ProcessUrl(url *url.URL) {
+	if url == nil || crawler == nil {
+		return
+	}
+	// Is deze URL één van onze domain crawlers?
+
+	domain := url.Hostname()
+	domainCrawler := crawler.DomainCrawlers[domain]
+
+	if domainCrawler != nil {
+		domainCrawler.AddItem(NewCrawlItem(url))
+	} else {
+		// todo: deze url ergens heen sturen voor latere verwerking
+	}
 }

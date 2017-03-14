@@ -22,14 +22,24 @@ func (parser *LinkParser) MatchDocument(document *html.Node, result *ParseResult
 	}
 
 	links := make([]*Link, len(selection))
+
+	errorOffset := 0
 	for i, node := range selection {
 		attr := NodeAttr(node, "href")
 		if attr != nil {
 			attrUrl, err := url.Parse(*attr)
 			if err == nil {
-				links[i] = &Link{NodeToText(node), *attrUrl}
+				links[i-errorOffset] = &Link{NodeToText(node), *attrUrl}
+			} else {
+				errorOffset++
 			}
+		} else {
+			errorOffset++
 		}
+	}
+
+	if errorOffset != 0 {
+		links = links[0 : len(links)-errorOffset]
 	}
 
 	result.Links = links

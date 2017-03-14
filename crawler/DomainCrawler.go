@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"fmt"
+	"github.com/deckarep/golang-set"
 	"sync"
 )
 
@@ -10,10 +11,11 @@ type DomainCrawler struct {
 	ActiveRequests int
 	Mutex          *sync.Mutex
 	Queue          *CrawlQueue
+	AlreadyVisited mapset.Set
 }
 
 func NewDomainCrawler(website *Website) *DomainCrawler {
-	return &DomainCrawler{Website: website, Mutex: &sync.Mutex{}, Queue: NewCrawlQueue()}
+	return &DomainCrawler{Website: website, Mutex: &sync.Mutex{}, Queue: NewCrawlQueue(), AlreadyVisited: mapset.NewSet()}
 }
 
 func (domainCrawler *DomainCrawler) DecreaseActiveRequests() {
@@ -28,7 +30,7 @@ func (domainCrawler *DomainCrawler) HasItemAvailable() *CrawlItem {
 	domainCrawler.Mutex.Lock()
 	defer domainCrawler.Mutex.Unlock()
 
-	if domainCrawler.Queue.IsEmpty() || domainCrawler.ActiveRequests >= 2 {
+	if domainCrawler.Queue.IsEmpty() || domainCrawler.ActiveRequests >= 10 {
 		return nil
 	}
 
@@ -40,4 +42,19 @@ func (domainCrawler *DomainCrawler) HasItemAvailable() *CrawlItem {
 	}
 
 	return item
+}
+
+func (domainCrawler *DomainCrawler) AddItem(item *CrawlItem) {
+	uri := item.URL.RequestURI()
+
+	// Beoordeel dit bestand: we willen enkel text bestanden
+	//
+
+	if !domainCrawler.AlreadyVisited.Add(uri) {
+		return
+	}
+
+	domainCrawler.Mutex.Lock()
+	domainCrawler.Queue.Push(item)
+	domainCrawler.Mutex.Unlock()
 }

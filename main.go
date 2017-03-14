@@ -38,11 +38,11 @@ func main() {
 		),
 	}*/
 
-	website := &crawler.Website{URL: "www.facebookcorewwwi.onion"}
+	website := &crawler.Website{URL: "www.scoutswetteren.be"}
 	myCrawler := crawler.NewCrawler(&config.CrawlerConfig{TorProxyAddress: "127.0.0.1:9150"})
 
 	//u, err := url.ParseRequestURI("http://hansamkt2rr6nfg3.onion/listing/10269/")
-	u, err := url.ParseRequestURI("https://www.facebookcorewwwi.onion")
+	u, err := url.ParseRequestURI("https://www.scoutswetteren.be")
 	if err == nil {
 		myCrawler.AddDomain(crawler.NewDomainCrawler(website))
 
