@@ -17,5 +17,5 @@ func NewCrawlItem(URL *url.URL) *CrawlItem {
 }
 
 func (item *CrawlItem) String() string {
-	return fmt.Sprintf("Item - URL = %v;", item.URL.EscapedPath())
+	return fmt.Sprintf("URL = %v", item.URL.EscapedPath())
 }

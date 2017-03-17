@@ -47,12 +47,10 @@ func (queue *CrawlQueue) IsEmpty() bool {
 }
 
 func (queue *CrawlQueue) PrintQueue() {
-	fmt.Println("Queue:")
 	item := queue.First
 	for item != nil {
 		fmt.Println(item.String())
 
 		item = item.Next
 	}
-	fmt.Println("- end queue")
 }

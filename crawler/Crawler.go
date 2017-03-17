@@ -8,7 +8,6 @@ import (
 	"github.com/SimonBackx/master-project/parser"
 	"golang.org/x/net/proxy"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -49,8 +48,7 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 	}
 
 	client := &http.Client{Transport: transport, Timeout: time.Second * 10}
-	ctx := context.Background()
-	ctx, cancelCtx := context.WithCancel(ctx)
+	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
 	return &Crawler{cfg: cfg, client: client, context: ctx, cancelContext: cancelCtx, waitGroup: wg, transport: transport, DomainCrawlers: make(map[string]*DomainCrawler), ResumeChannel: make(chan bool, 1)}
@@ -70,7 +68,7 @@ func (crawler *Crawler) Wake() {
 }
 
 func (crawler *Crawler) Start(signal chan int) {
-	fmt.Println("Crawler started")
+	crawler.cfg.LogInfo("Crawler started")
 
 	for {
 
@@ -93,25 +91,28 @@ func (crawler *Crawler) Start(signal chan int) {
 		//fmt.Println("Loop end -  blocking")
 		// We hebben alles gestart wat we konden starten.
 		// Nu wachten we tot er iets aan de situatie veranderd is
+		// Wacht tot iemand crawler.Wake() aanroept
 		<-crawler.ResumeChannel
 
 		// Ontvangen we een quit signaal?
 		select {
 		case code := <-signal:
-			fmt.Printf("Received signal: %v\n", code)
-			for _, domainCrawler := range crawler.DomainCrawlers {
-				fmt.Printf("DomainCrawler %v:\n", domainCrawler.Website.URL)
-				domainCrawler.Queue.PrintQueue()
-				fmt.Println("")
-			}
 			if code == 1 {
+				crawler.cfg.LogInfo("Stopping crawler...")
 				crawler.cancelContext()
 				// Wacht tot de context is beïndigd
 				<-crawler.context.Done()
 
 				// Wachten tot alle goroutines afgelopen zijn die requests verwerken
 				crawler.waitGroup.Wait()
-				fmt.Printf("Crawler has stopped\n")
+
+				for _, domainCrawler := range crawler.DomainCrawlers {
+					crawler.cfg.LogInfo(fmt.Sprintf("Queue remaining for %v:", domainCrawler.Website.URL))
+					domainCrawler.Queue.PrintQueue()
+					fmt.Println()
+				}
+
+				crawler.cfg.LogInfo("The crawler has stopped")
 				return
 			}
 		default:
@@ -122,7 +123,7 @@ func (crawler *Crawler) Start(signal chan int) {
 func (crawler *Crawler) Crawl(item *CrawlItem, domainCrawler *DomainCrawler) {
 	defer func() {
 		domainCrawler.DecreaseActiveRequests()
-		time.Sleep(2 * time.Second)
+		//time.Sleep(2 * time.Second)
 
 		// Aangeven dat deze goroutine afgelopen is
 		crawler.waitGroup.Done()
@@ -135,7 +136,7 @@ func (crawler *Crawler) Crawl(item *CrawlItem, domainCrawler *DomainCrawler) {
 	if item.Body != nil {
 		reader = strings.NewReader(*item.Body)
 	}
-	fmt.Println("Request:", item.URL.String())
+	crawler.cfg.LogInfo(fmt.Sprintf("Request started. URL = %v", item.URL.String()))
 
 	if request, err := http.NewRequest(item.Method, item.URL.String(), reader); err == nil {
 		request.Header.Add("Accept", "text/html")
@@ -144,7 +145,7 @@ func (crawler *Crawler) Crawl(item *CrawlItem, domainCrawler *DomainCrawler) {
 		if response, err := crawler.client.Do(request); err == nil {
 			crawler.ProcessResponse(item, domainCrawler, response.Request, response)
 		} else {
-			if urlErr, ok := err.(*url.Error); ok {
+			/*if urlErr, ok := err.(*url.Error); ok {
 				if netOpErr, ok := urlErr.Err.(*net.OpError); ok && netOpErr.Timeout() {
 					fmt.Println("Timeout: ", item.URL.String())
 				} else {
@@ -153,7 +154,7 @@ func (crawler *Crawler) Crawl(item *CrawlItem, domainCrawler *DomainCrawler) {
 				fmt.Println("Unknown error: ", err, item.URL.String())
 			}
 
-			fmt.Printf("%v, %T\n", err, err)
+			fmt.Printf("%v, %T\n", err, err)*/
 			crawler.cfg.LogError(err)
 		}
 	} else {
@@ -172,7 +173,8 @@ func (crawler *Crawler) ProcessResponse(item *CrawlItem, domainCrawler *DomainCr
 
 	/*fmt.Println("Request headers:")
 	PrintHeader(&request.Header)*/
-	fmt.Println("Response:", item.URL.String())
+	crawler.cfg.LogInfo(fmt.Sprintf("Response received. URL = %v", item.URL.String()))
+
 	//fmt.Println("Status:", response.Status)
 	//fmt.Println("Response headers:")
 	//printHeader(&response.Header)
@@ -187,7 +189,7 @@ func (crawler *Crawler) ProcessResponse(item *CrawlItem, domainCrawler *DomainCr
 		if _, ok := err.(parser.ParseError); ok {
 			crawler.cfg.LogError(err)
 		} else {
-			fmt.Println("Error: not valid html or too long body")
+			//fmt.Println("Error: not valid html or too long body")
 			crawler.cfg.LogError(err)
 		}
 

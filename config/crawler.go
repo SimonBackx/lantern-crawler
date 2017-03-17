@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 )
 
 type CrawlerConfig struct {
@@ -9,5 +10,14 @@ type CrawlerConfig struct {
 }
 
 func (cfg *CrawlerConfig) LogError(err error) {
-	fmt.Println("Error:", err)
+	cfg.Log("Error", err.Error())
+}
+
+func (cfg *CrawlerConfig) LogInfo(str string) {
+	cfg.Log("Info", str)
+}
+
+func (cfg *CrawlerConfig) Log(label, str string) {
+	t := time.Now()
+	fmt.Printf("[%v: %v] %v\n", label, t.Format("15:04:05.000"), str)
 }

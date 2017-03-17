@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"github.com/SimonBackx/master-project/config"
 	"github.com/SimonBackx/master-project/crawler"
-	//"github.com/SimonBackx/master-project/parser"
+	"github.com/SimonBackx/master-project/parser"
 	"net/url"
-	//"regexp"
+	"regexp"
 )
 
 func run(quit chan bool, finished chan bool) {
@@ -14,18 +14,18 @@ func run(quit chan bool, finished chan bool) {
 		finished <- true
 	}()
 	// Website configuratie ophalen
-	/*website := &crawler.Website{
-	    Name:          "Hansa Market",
-	    URL:           "hansamkt2rr6nfg3.onion",
-	    MaxRequests:   1,
-	    ListingRegexp: regexp.MustCompile("/listing/[0-9]+/?"),
-	    ListingConfiguration: parser.NewListingConfiguration(
-	        ".container .row h2",
-	        ".container .row h3 + p",
-	        ".container .row h2 + .row form table a",
-	        ".listing-price strong",
-	    ),
-	}*/
+	website := &crawler.Website{
+		Name:          "Hansa Market",
+		URL:           "hansamkt2rr6nfg3.onion",
+		MaxRequests:   1,
+		ListingRegexp: regexp.MustCompile("/listing/[0-9]+/?"),
+		ListingConfiguration: parser.NewListingConfiguration(
+			".container .row h2",
+			".container .row h3 + p",
+			".container .row h2 + .row form table a",
+			".listing-price strong",
+		),
+	}
 
 	/*website := &crawler.Website{
 	    Name:          "0day.today",
@@ -40,18 +40,19 @@ func run(quit chan bool, finished chan bool) {
 	    ),
 	}*/
 
-	website := &crawler.Website{URL: "www.scoutswetteren.be", MaxRequests: 10}
+	//website := &crawler.Website{URL: "www.scoutswetteren.be", MaxRequests: 10}
 
 	// Door tor sturen
-	//conf := &config.CrawlerConfig{TorProxyAddress: "127.0.0.1:9150"}
+	proxyAddr := "127.0.0.1:9150"
+	conf := &config.CrawlerConfig{TorProxyAddress: &proxyAddr}
 
 	// Niet door tor sturen
-	conf := &config.CrawlerConfig{}
+	//conf := &config.CrawlerConfig{}
 
 	myCrawler := crawler.NewCrawler(conf)
 
-	//u, err := url.ParseRequestURI("http://hansamkt2rr6nfg3.onion")
-	u, err := url.ParseRequestURI("https://www.scoutswetteren.be")
+	u, err := url.ParseRequestURI("http://hansamkt2rr6nfg3.onion")
+	//u, err := url.ParseRequestURI("https://www.scoutswetteren.be")
 	if err == nil {
 		myCrawler.AddDomain(crawler.NewDomainCrawler(website))
 

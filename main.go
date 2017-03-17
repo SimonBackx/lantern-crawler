@@ -38,7 +38,7 @@ func (p *program) Start(s service.Service) error {
 
 func (p *program) Stop(s service.Service) error {
 	// Any work in Stop should be quick, usually a few seconds at most.
-	logger.Info("I'm Stopping!")
+	//logger.Info("I'm Stopping!")
 	p.exit <- true
 
 	// Wachten tot stoppen voltooid is
