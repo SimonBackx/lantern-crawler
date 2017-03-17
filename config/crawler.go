@@ -5,7 +5,7 @@ import (
 )
 
 type CrawlerConfig struct {
-	TorProxyAddress string
+	TorProxyAddress *string
 }
 
 func (cfg *CrawlerConfig) LogError(err error) {

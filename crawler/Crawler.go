@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"github.com/SimonBackx/master-project/config"
 	"github.com/SimonBackx/master-project/parser"
@@ -11,32 +12,48 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
 type Crawler struct {
-	cfg            *config.CrawlerConfig
-	transport      *http.Transport
-	client         *http.Client
+	cfg           *config.CrawlerConfig
+	transport     *http.Transport
+	client        *http.Client
+	context       context.Context
+	cancelContext context.CancelFunc
+
 	DomainCrawlers map[string]*DomainCrawler
 
 	ResumeChannel chan bool
+
+	// Waitgroup die we gebruiken als we op alle requests willen wachten
+	waitGroup sync.WaitGroup
 }
 
 func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
-	torDialer, err := proxy.SOCKS5("tcp", cfg.TorProxyAddress, nil, proxy.Direct)
+	var transport *http.Transport
 
-	if err != nil {
-		cfg.LogError(err)
-		return nil
+	if cfg.TorProxyAddress != nil {
+		torDialer, err := proxy.SOCKS5("tcp", *cfg.TorProxyAddress, nil, proxy.Direct)
+
+		if err != nil {
+			cfg.LogError(err)
+			return nil
+		}
+		transport = &http.Transport{
+			Dial: torDialer.Dial,
+		}
+	} else {
+		transport = &http.Transport{}
 	}
 
-	transport := &http.Transport{
-		Dial: torDialer.Dial,
-	}
 	client := &http.Client{Transport: transport, Timeout: time.Second * 10}
+	ctx := context.Background()
+	ctx, cancelCtx := context.WithCancel(ctx)
 
-	return &Crawler{cfg: cfg, client: client, transport: transport, DomainCrawlers: make(map[string]*DomainCrawler), ResumeChannel: make(chan bool, 1)}
+	var wg sync.WaitGroup
+	return &Crawler{cfg: cfg, client: client, context: ctx, cancelContext: cancelCtx, waitGroup: wg, transport: transport, DomainCrawlers: make(map[string]*DomainCrawler), ResumeChannel: make(chan bool, 1)}
 }
 
 func (crawler *Crawler) AddDomain(domainCrawler *DomainCrawler) {
@@ -52,7 +69,9 @@ func (crawler *Crawler) Wake() {
 	}
 }
 
-func (crawler *Crawler) Start() {
+func (crawler *Crawler) Start(signal chan int) {
+	fmt.Println("Crawler started")
+
 	for {
 
 		//fmt.Println("Loop start - unblocked")
@@ -62,6 +81,8 @@ func (crawler *Crawler) Start() {
 
 			for {
 				if item := domainCrawler.HasItemAvailable(); item != nil {
+					// Mogelijk maken om op onze goroutines te wachten
+					crawler.waitGroup.Add(1)
 					go crawler.Crawl(item, domainCrawler)
 				} else {
 					break
@@ -73,6 +94,28 @@ func (crawler *Crawler) Start() {
 		// We hebben alles gestart wat we konden starten.
 		// Nu wachten we tot er iets aan de situatie veranderd is
 		<-crawler.ResumeChannel
+
+		// Ontvangen we een quit signaal?
+		select {
+		case code := <-signal:
+			fmt.Printf("Received signal: %v\n", code)
+			for _, domainCrawler := range crawler.DomainCrawlers {
+				fmt.Printf("DomainCrawler %v:\n", domainCrawler.Website.URL)
+				domainCrawler.Queue.PrintQueue()
+				fmt.Println("")
+			}
+			if code == 1 {
+				crawler.cancelContext()
+				// Wacht tot de context is beïndigd
+				<-crawler.context.Done()
+
+				// Wachten tot alle goroutines afgelopen zijn die requests verwerken
+				crawler.waitGroup.Wait()
+				fmt.Printf("Crawler has stopped\n")
+				return
+			}
+		default:
+		}
 	}
 }
 
@@ -80,6 +123,11 @@ func (crawler *Crawler) Crawl(item *CrawlItem, domainCrawler *DomainCrawler) {
 	defer func() {
 		domainCrawler.DecreaseActiveRequests()
 		time.Sleep(2 * time.Second)
+
+		// Aangeven dat deze goroutine afgelopen is
+		crawler.waitGroup.Done()
+
+		// Onze crawler terug wakker maken om eventueel een nieuwe request op te starten
 		crawler.Wake()
 	}()
 
@@ -91,6 +139,8 @@ func (crawler *Crawler) Crawl(item *CrawlItem, domainCrawler *DomainCrawler) {
 
 	if request, err := http.NewRequest(item.Method, item.URL.String(), reader); err == nil {
 		request.Header.Add("Accept", "text/html")
+		request = request.WithContext(crawler.context)
+
 		if response, err := crawler.client.Do(request); err == nil {
 			crawler.ProcessResponse(item, domainCrawler, response.Request, response)
 		} else {

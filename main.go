@@ -1,54 +1,97 @@
+// Copyright 2015 Daniel Theophanes.
+// Use of this source code is governed by a zlib-style
+// license that can be found in the LICENSE file.
+
+// Simple service that only works by printing a log message every few seconds.
 package main
 
 import (
-	"fmt"
-	"github.com/SimonBackx/master-project/config"
-	"github.com/SimonBackx/master-project/crawler"
-	"github.com/SimonBackx/master-project/parser"
-	"net/url"
-	"regexp"
+	"flag"
+	"log"
+	//"time"
+
+	"github.com/kardianos/service"
 )
 
+var logger service.Logger
+
+// Program structures.
+//  Define Start and Stop methods.
+type program struct {
+	exit     chan bool
+	finished chan bool
+}
+
+func (p *program) Start(s service.Service) error {
+	if service.Interactive() {
+		logger.Info("Running in terminal.")
+	} else {
+		logger.Info("Running under service manager.")
+	}
+	p.exit = make(chan bool)
+	p.finished = make(chan bool)
+
+	// Start should not block. Do the actual work async.
+	go run(p.exit, p.finished)
+	return nil
+}
+
+func (p *program) Stop(s service.Service) error {
+	// Any work in Stop should be quick, usually a few seconds at most.
+	logger.Info("I'm Stopping!")
+	p.exit <- true
+
+	// Wachten tot stoppen voltooid is
+	<-p.finished
+	return nil
+}
+
+// Service setup.
+//   Define service config.
+//   Create the service.
+//   Setup the logger.
+//   Handle service controls (optional).
+//   Run the service.
 func main() {
-	// Website configuratie ophalen
-	website := &crawler.Website{
-		Name:          "Hansa Market",
-		URL:           "hansamkt2rr6nfg3.onion",
-		MaxRequests:   1,
-		ListingRegexp: regexp.MustCompile("/listing/[0-9]+/?"),
-		ListingConfiguration: parser.NewListingConfiguration(
-			".container .row h2",
-			".container .row h3 + p",
-			".container .row h2 + .row form table a",
-			".listing-price strong",
-		),
+	svcFlag := flag.String("service", "", "Control the system service.")
+	flag.Parse()
+
+	svcConfig := &service.Config{
+		Name:        "GoServiceExampleLogging",
+		DisplayName: "Go Service Example for Logging",
+		Description: "This is an example Go service that outputs log messages.",
 	}
 
-	/*website := &crawler.Website{
-		Name:          "0day.today",
-		URL:           "0day.today",
-		MaxRequests:   1,
-		ListingRegexp: regexp.MustCompile("/exploit/description/[0-9]+/?"),
-		ListingConfiguration: parser.NewListingConfiguration(
-			".exploit_title h1",                                                // title
-			".exploit_view_table_content div.td:contains('Description') + .td", // description
-			"div.td:contains('Author') + .td a",                                // author
-			"div.td:contains('Price') + .td .GoldText",                         // price
-		),
-	}*/
+	prg := &program{}
+	s, err := service.New(prg, svcConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	errs := make(chan error, 5)
+	logger, err = s.Logger(errs)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	//website := &crawler.Website{URL: "www.scoutswetteren.be", MaxRequests: 10}
-	myCrawler := crawler.NewCrawler(&config.CrawlerConfig{TorProxyAddress: "127.0.0.1:9150"})
+	go func() {
+		for {
+			err := <-errs
+			if err != nil {
+				log.Print(err)
+			}
+		}
+	}()
 
-	u, err := url.ParseRequestURI("http://hansamkt2rr6nfg3.onion")
-	//u, err := url.ParseRequestURI("https://www.scoutswetteren.be")
-	if err == nil {
-		myCrawler.AddDomain(crawler.NewDomainCrawler(website))
-
-		fmt.Println("Crawl started")
-		myCrawler.ProcessUrl(u)
-		myCrawler.Start()
-	} else {
-		fmt.Println(err)
+	if len(*svcFlag) != 0 {
+		err := service.Control(s, *svcFlag)
+		if err != nil {
+			log.Printf("Valid actions: %q\n", service.ControlAction)
+			log.Fatal(err)
+		}
+		return
+	}
+	err = s.Run()
+	if err != nil {
+		logger.Error(err)
 	}
 }

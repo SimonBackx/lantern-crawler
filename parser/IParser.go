@@ -14,7 +14,7 @@ type ParseResult struct {
 
 func PrintLinks(links []*Link) {
 	for _, link := range links {
-		fmt.Println(link.Anchor, " > ", link.Href)
+		fmt.Println(link.Anchor, " > ", link.Href.String())
 	}
 }
 

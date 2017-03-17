@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"fmt"
 	"net/url"
 )
 
@@ -13,4 +14,8 @@ type CrawlItem struct {
 
 func NewCrawlItem(URL *url.URL) *CrawlItem {
 	return &CrawlItem{URL: URL}
+}
+
+func (item *CrawlItem) String() string {
+	return fmt.Sprintf("Item - URL = %v;", item.URL.EscapedPath())
 }
