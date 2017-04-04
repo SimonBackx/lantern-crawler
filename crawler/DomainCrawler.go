@@ -42,8 +42,10 @@ func (domainCrawler *DomainCrawler) HasItemAvailable() *CrawlItem {
 }
 
 func (domainCrawler *DomainCrawler) AddItem(item *CrawlItem) {
-	uri := item.URL.RequestURI()
+	uri := item.URL.EscapedPath()
 
+	domainCrawler.Mutex.Lock()
+	defer domainCrawler.Mutex.Unlock()
 	// Beoordeel dit bestand: we willen enkel text bestanden
 	//
 
@@ -51,7 +53,5 @@ func (domainCrawler *DomainCrawler) AddItem(item *CrawlItem) {
 		return
 	}
 
-	domainCrawler.Mutex.Lock()
 	domainCrawler.Queue.Push(item)
-	domainCrawler.Mutex.Unlock()
 }

@@ -57,9 +57,9 @@ func main() {
 	flag.Parse()
 
 	svcConfig := &service.Config{
-		Name:        "GoServiceExampleLogging",
-		DisplayName: "Go Service Example for Logging",
-		Description: "This is an example Go service that outputs log messages.",
+		Name:        "Darkspider",
+		DisplayName: "Darkspider",
+		Description: "Cyber threat collection in the darkweb",
 	}
 
 	prg := &program{}
