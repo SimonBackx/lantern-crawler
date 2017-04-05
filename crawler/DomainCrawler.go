@@ -1,7 +1,10 @@
 package crawler
 
 import (
+	//"fmt"
 	"github.com/deckarep/golang-set"
+	"math/rand"
+	"net/http"
 	"sync"
 )
 
@@ -11,23 +14,57 @@ type DomainCrawler struct {
 	Mutex          *sync.Mutex
 	Queue          *CrawlQueue
 	AlreadyVisited mapset.Set
+	Active         bool
+	Client         *http.Client
+
+	// Aantal requests die nog voltooid moeten worden
+	// voor hij overweegt om naar slaapstand te gaan
+	// als er andere domeinen 'wachten'
+	sleepAfter int
+}
+
+func (domainCrawler *DomainCrawler) String() string {
+	return domainCrawler.Website.URL
 }
 
 func NewDomainCrawler(website *Website) *DomainCrawler {
-	return &DomainCrawler{Website: website, Mutex: &sync.Mutex{}, Queue: NewCrawlQueue(), AlreadyVisited: mapset.NewSet()}
+	//fmt.Println("New domain", website.URL)
+
+	domainCrawler := &DomainCrawler{Website: website, Mutex: &sync.Mutex{}, Queue: NewCrawlQueue(), AlreadyVisited: mapset.NewSet()}
+	domainCrawler.sleep() // lock niet nodig in constructor
+	return domainCrawler
 }
 
-func (domainCrawler *DomainCrawler) DecreaseActiveRequests() {
+func (domainCrawler *DomainCrawler) RequestStarted() {
+}
+
+func (domainCrawler *DomainCrawler) RequestFinished() {
 	domainCrawler.Mutex.Lock()
+	defer domainCrawler.Mutex.Unlock()
+
 	domainCrawler.ActiveRequests--
-	domainCrawler.Mutex.Unlock()
+	domainCrawler.sleepAfter--
+	if domainCrawler.sleepAfter <= 0 {
+		// Ga in slaapmodus
+		domainCrawler.sleep()
+	}
+}
+
+func (domainCrawler *DomainCrawler) InMemory() bool {
+	return domainCrawler.Queue != nil
 }
 
 func (domainCrawler *DomainCrawler) HasItemAvailable() *CrawlItem {
 	domainCrawler.Mutex.Lock()
 	defer domainCrawler.Mutex.Unlock()
 
-	if domainCrawler.Queue.IsEmpty() || domainCrawler.ActiveRequests >= domainCrawler.Website.MaxRequests {
+	if !domainCrawler.Active {
+		// Geen items beschikbaar als we inactive zijn
+		return nil
+	}
+
+	// Maximum 1 request toelaten tergelijk
+	if domainCrawler.Queue.IsEmpty() || domainCrawler.ActiveRequests >= 1 {
 		return nil
 	}
 
@@ -46,12 +83,75 @@ func (domainCrawler *DomainCrawler) AddItem(item *CrawlItem) {
 
 	domainCrawler.Mutex.Lock()
 	defer domainCrawler.Mutex.Unlock()
-	// Beoordeel dit bestand: we willen enkel text bestanden
-	//
+
+	if !domainCrawler.InMemory() {
+		// Toevoegen aan een tijdelijke already visted lijst die
+		// af en toe naar disk wordt geschreven
+		return
+	}
 
 	if !domainCrawler.AlreadyVisited.Add(uri) {
 		return
 	}
 
 	domainCrawler.Queue.Push(item)
+}
+
+func (domainCrawler *DomainCrawler) Wake(client *http.Client) {
+	domainCrawler.Mutex.Lock()
+	defer domainCrawler.Mutex.Unlock()
+
+	//fmt.Println("Domain", domainCrawler.Website.URL, "awoke")
+
+	domainCrawler.Client = client
+	domainCrawler.Active = true
+
+	if !domainCrawler.InMemory() {
+		// Lezen vanaf disk!
+		domainCrawler.Load()
+	}
+}
+
+func (domainCrawler *DomainCrawler) Sleep() {
+	domainCrawler.Mutex.Lock()
+	defer domainCrawler.Mutex.Unlock()
+	domainCrawler.sleep()
+}
+
+/**
+ * Ga naar slaapstand, enkel aanroepen binnen de mutex lock!
+ * @param  {[type]} domainCrawler *DomainCrawler) Sleep( [description]
+ * @return {[type]}               [description]
+ */
+func (domainCrawler *DomainCrawler) sleep() {
+	// Mutex moet al locked zijn voor het aanroepen!
+	//fmt.Println("Domain", domainCrawler.Website.URL, "went to sleep")
+
+	domainCrawler.Active = false
+	//domainCrawler.Client = nil // Niet doen -> moet nog gebruikt worden voor raadplegen
+
+	// ResignAfter opnieuw invullen (minimum 1 request)
+	domainCrawler.sleepAfter = rand.Intn(5) + 1
+}
+
+/**
+ * Plaats vrijmaken door queue en already visted weg te schrijven naar disk
+ * @param  {[type]} domainCrawler *DomainCrawler) Free( [description]
+ * @return {[type]}               [description]
+ */
+func (domainCrawler *DomainCrawler) Free() {
+	// Queue leegmaken en opslaan
+
+	// Already visited leegmaken en opslaan
+}
+
+/**
+ * Opgeslagen data lezen vanaf disk
+ * @param  {[type]} domainCrawler *DomainCrawler) Free( [description]
+ * @return {[type]}               [description]
+ */
+func (domainCrawler *DomainCrawler) Load() {
+	// Queue leegmaken en opslaan
+
+	// Already visited leegmaken en opslaan
 }

@@ -7,10 +7,8 @@ import (
 )
 
 type Website struct {
-	Name            string
-	URL             string
-	RunningRequests int
-	MaxRequests     int
+	Name string
+	URL  string
 
 	ListingConfiguration *parser.ListingConfiguration // Kan nil zijn
 	ListingRegexp        *regexp.Regexp               // Kan nil zijn
