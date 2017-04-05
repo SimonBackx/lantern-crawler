@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	//"fmt"
 	"github.com/PuerkitoBio/purell"
 	"github.com/SimonBackx/master-project/parser"
 	"github.com/deckarep/golang-set"
@@ -78,10 +79,10 @@ func (w *Hostworker) Run(client *http.Client) {
 		w.crawler.WorkerEnded <- w
 	}()
 
-	w.crawler.cfg.LogInfo("Goroutine for host " + w.String() + " started")
+	//w.crawler.cfg.LogInfo("Goroutine for host " + w.String() + " started")
 
 	w.Client = client
-	w.sleepAfter = rand.Intn(10) + 2
+	w.sleepAfter = rand.Intn(60) + 2
 
 	for {
 		select {
@@ -106,7 +107,7 @@ func (w *Hostworker) Run(client *http.Client) {
 				// Meteen stoppen
 				return
 			}
-			time.Sleep(time.Second * time.Duration(rand.Intn(10)+2))
+			time.Sleep(time.Second * time.Duration(rand.Intn(5)+1))
 		}
 	}
 }
@@ -118,13 +119,14 @@ func (w *Hostworker) Request(item *CrawlItem) {
 
 	if request, err := http.NewRequest(item.Method, item.URL.String(), reader); err == nil {
 		request.Header.Add("Accept", "text/html")
+		request.Header.Set("Content-Type", "text/html")
+		request.Close = true // Connectie weggooien
 		request = request.WithContext(w.crawler.context)
 
 		if response, err := w.Client.Do(request); err == nil {
 			w.ProcessResponse(item, response)
 		} else {
 			if response != nil && response.Body != nil {
-				w.crawler.cfg.Log("DEBUG INFO", "Body is niet nil!")
 				response.Body.Close()
 			}
 
@@ -173,13 +175,17 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response) {
 
 			// Url moet absoluut zijn
 			if u == nil || !u.IsAbs() {
-				return
+				break
 			}
 
 			if !strings.HasPrefix(u.Scheme, "http") {
 				// Geen http / https url
-				return
+				break
 			}
+
+			/*if !strings.HasSuffix(u.Hostname(), ".onion") {
+				break
+			}*/
 
 			if u.Hostname() == w.Website.URL {
 				// Interne URL's meteen verwerken

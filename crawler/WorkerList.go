@@ -49,8 +49,10 @@ func (list *WorkerList) Pop() *Hostworker {
 		if list.First == nil {
 			list.Last = nil
 		}
+
+		return result.Worker
 	}
-	return result.Worker
+	return nil
 }
 
 func (list *WorkerList) Print() {

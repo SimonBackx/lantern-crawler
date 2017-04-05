@@ -1,0 +1,8 @@
+version: '3'
+services:
+  crawler:
+    build: ./docker
+    image: crawler
+    volumes: 
+     - ./build:/crawler
+    command: ./crawler/crawler

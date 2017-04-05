@@ -40,7 +40,7 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 
 	var wg sync.WaitGroup
 	return &Crawler{cfg: cfg,
-		distributor:      NewClearnetDistributor(),
+		distributor:      NewTorDistributor(),
 		context:          ctx,
 		cancelContext:    cancelCtx,
 		waitGroup:        wg,
@@ -146,6 +146,7 @@ func (crawler *Crawler) Start(signal chan int) {
 	for {
 		select {
 		case worker := <-crawler.WorkerEnded:
+			//crawler.cfg.LogInfo("Goroutine for host " + worker.String() + " stopped")
 			worker.Running = false
 
 			// Pending items aan queue toevoegen, als die er nog zijn
@@ -158,8 +159,6 @@ func (crawler *Crawler) Start(signal chan int) {
 				worker.Sleeping = true
 				crawler.SleepingCrawlers.Push(worker)
 			}
-
-			//crawler.cfg.LogInfo("Goroutine for host " + worker.String() + " stopped")
 
 			// Een worker heeft zich afgesloten
 			crawler.distributor.FreeClient(worker.Client)

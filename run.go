@@ -48,8 +48,8 @@ func run(quit chan bool, finished chan bool) {
 
 	myCrawler := crawler.NewCrawler(conf)
 
-	//u, err := url.ParseRequestURI("http://hansamkt2rr6nfg3.onion")
 	u, err := url.ParseRequestURI("https://www.scoutswetteren.be")
+	//u, err := url.ParseRequestURI("http://hansamkt3iph6sbb.onion")
 	if err == nil {
 		myCrawler.ProcessUrl(u)
 
