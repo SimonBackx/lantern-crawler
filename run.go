@@ -60,7 +60,6 @@ func run(quit chan bool, finished chan bool) {
 			fmt.Println("Sending shutdown signal")
 			// Stop signaal sturen naar onze crawler
 			signal <- 1
-			myCrawler.Wake()
 		}()
 
 		myCrawler.Start(signal)

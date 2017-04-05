@@ -11,6 +11,11 @@ func NewCrawlQueue() *CrawlQueue {
 	return &CrawlQueue{}
 }
 
+func (queue *CrawlQueue) Clear() {
+	queue.First = nil
+	queue.Last = nil
+}
+
 func (queue *CrawlQueue) Pop() *CrawlItem {
 	if queue == nil || queue.First == nil {
 		return nil
@@ -40,6 +45,17 @@ func (queue *CrawlQueue) Push(item *CrawlItem) {
 
 	queue.Last.Next = item
 	queue.Last = item
+}
+
+func (queue *CrawlQueue) Merge(q *CrawlQueue) {
+	if queue.First == nil {
+		queue.First = q.First
+		queue.Last = q.Last
+		return
+	}
+
+	queue.Last.Next = q.First
+	queue.Last = q.Last
 }
 
 func (queue *CrawlQueue) IsEmpty() bool {

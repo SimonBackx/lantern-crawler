@@ -11,7 +11,7 @@ type SpeedLogger struct {
 }
 
 func NewSpeedLogger() *SpeedLogger {
-	logger := &SpeedLogger{Count: 0, Ticker: time.NewTicker(2 * time.Second)}
+	logger := &SpeedLogger{Count: 0, Ticker: time.NewTicker(10 * time.Second)}
 	go logger.Run()
 	return logger
 }

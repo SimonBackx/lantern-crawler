@@ -17,7 +17,7 @@ type ClearnetDistributor struct {
 
 func NewClearnetDistributor() *ClearnetDistributor {
 	client := &http.Client{Transport: &http.Transport{}, Timeout: time.Second * 10}
-	return &ClearnetDistributor{Client: client, Count: 10}
+	return &ClearnetDistributor{Client: client, Count: 100}
 }
 
 func (dist *ClearnetDistributor) GetClient() *http.Client {
@@ -31,3 +31,19 @@ func (dist *ClearnetDistributor) GetClient() *http.Client {
 func (dist *ClearnetDistributor) FreeClient(client *http.Client) {
 	dist.Count++
 }
+
+/*if cfg.TorProxyAddress != nil {
+	torDialer, err := proxy.SOCKS5("tcp", *cfg.TorProxyAddress, nil, proxy.Direct)
+
+	if err != nil {
+		cfg.LogError(err)
+		return nil
+	}
+	transport = &http.Transport{
+		Dial: torDialer.Dial,
+	}
+} else {
+	transport = &http.Transport{}
+}
+
+client := &http.Client{Transport: transport, Timeout: time.Second * 10}*/
