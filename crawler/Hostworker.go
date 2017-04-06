@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	//"bytes"
 	//"fmt"
 	"github.com/PuerkitoBio/purell"
 	"github.com/SimonBackx/master-project/parser"
@@ -9,6 +10,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -82,7 +84,9 @@ func (w *Hostworker) Run(client *http.Client) {
 	//w.crawler.cfg.LogInfo("Goroutine for host " + w.String() + " started")
 
 	w.Client = client
-	w.sleepAfter = rand.Intn(60) + 2
+
+	// Snel horizontaal uitbreiden: neem laag getal
+	w.sleepAfter = rand.Intn(10) + 2
 
 	for {
 		select {
@@ -118,8 +122,11 @@ func (w *Hostworker) Request(item *CrawlItem) {
 	}
 
 	if request, err := http.NewRequest(item.Method, item.URL.String(), reader); err == nil {
-		request.Header.Add("Accept", "text/html")
-		request.Header.Set("Content-Type", "text/html")
+		request.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1; rv:45.0) Gecko/20100101 Firefox/45.0")
+		request.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		request.Header.Add("Accept_Language", "en-US,en;q=0.5")
+		request.Header.Add("Connection", "keep-alive")
+
 		request.Close = true // Connectie weggooien
 		request = request.WithContext(w.crawler.context)
 
@@ -153,6 +160,10 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response) {
 	requestUrl := *response.Request.URL
 	urlRef := &requestUrl
 
+	/*buf := new(bytes.Buffer)
+	buf.ReadFrom(response.Body)
+	w.crawler.cfg.LogInfo(buf.String()) // Does a complete copy of the bytes in the buffer.*/
+
 	// Doorgeven aan parser
 	result, err := parser.Parse(response.Body, w.Website.GetParsers(urlRef))
 
@@ -179,13 +190,31 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response) {
 			}
 
 			if !strings.HasPrefix(u.Scheme, "http") {
-				// Geen http / https url
 				break
 			}
 
-			/*if !strings.HasSuffix(u.Hostname(), ".onion") {
+			if !strings.HasSuffix(u.Hostname(), ".onion") {
 				break
-			}*/
+			}
+
+			if len(u.Host) != 22 {
+				// Ongeldig -> verwijder alle ongeldige characters (tor browser doet dit ook)
+				reg := regexp.MustCompile("[^a-zA-Z2-7.]+")
+				u.Host = reg.ReplaceAllString(u.Host, "")
+				if len(u.Host) != 22 {
+					break
+				}
+			}
+
+			normalized := purell.NormalizeURL(u,
+				purell.FlagsSafe)
+
+			u, err = url.ParseRequestURI(normalized)
+
+			if err != nil {
+				w.crawler.cfg.LogError(err)
+				break
+			}
 
 			if u.Hostname() == w.Website.URL {
 				// Interne URL's meteen verwerken
@@ -235,8 +264,7 @@ func (w *Hostworker) GetNextRequest() *CrawlItem {
 
 func (w *Hostworker) AddItem(item *CrawlItem) {
 	normalized := purell.NormalizeURL(item.URL,
-		purell.FlagUppercaseEscapes|
-			purell.FlagDecodeUnnecessaryEscapes|
+		purell.FlagDecodeUnnecessaryEscapes|
 			purell.FlagUppercaseEscapes|
 			purell.FlagEncodeNecessaryEscapes|
 			purell.FlagRemoveDefaultPort|

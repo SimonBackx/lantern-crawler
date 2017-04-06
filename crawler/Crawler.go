@@ -39,7 +39,7 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	return &Crawler{cfg: cfg,
+	crawler := &Crawler{cfg: cfg,
 		distributor:      NewTorDistributor(),
 		context:          ctx,
 		cancelContext:    cancelCtx,
@@ -51,6 +51,9 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 		speedLogger:      NewSpeedLogger(),
 		Stop:             make(chan struct{}, 1),
 	}
+	crawler.speedLogger.Crawler = crawler
+
+	return crawler
 }
 
 func (crawler *Crawler) ProcessUrl(url *url.URL) {

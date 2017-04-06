@@ -6,8 +6,9 @@ import (
 )
 
 type SpeedLogger struct {
-	Count  int
-	Ticker *time.Ticker
+	Count   int
+	Ticker  *time.Ticker
+	Crawler *Crawler
 }
 
 func NewSpeedLogger() *SpeedLogger {
@@ -17,23 +18,23 @@ func NewSpeedLogger() *SpeedLogger {
 }
 
 func (logger *SpeedLogger) Run() {
-	var previousTime *time.Time
+	//var previousTime *time.Time
 	for {
-		ti, ok := <-logger.Ticker.C
+		_, ok := <-logger.Ticker.C
 		if !ok {
 			return
 		}
-		if previousTime == nil {
+		/*if previousTime == nil {
 			previousTime = &ti
 			continue
-		}
+		}*/
 
-		difference := ti.Sub(*previousTime)
-		var requests float64 = float64(logger.Count) / (float64(difference.Nanoseconds()) / 1000000000)
+		//difference := ti.Sub(*previousTime)
+		var requests float64 = float64(logger.Count) / 10
 
-		previousTime = &ti
+		//previousTime = &ti
 
-		fmt.Printf("Req/s = %v\n", requests)
+		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v REQ/S (%v unique domains known)", requests, len(logger.Crawler.Workers)))
 		logger.Count = 0
 	}
 }

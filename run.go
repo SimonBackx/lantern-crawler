@@ -48,24 +48,25 @@ func run(quit chan bool, finished chan bool) {
 
 	myCrawler := crawler.NewCrawler(conf)
 
-	u, err := url.ParseRequestURI("https://www.scoutswetteren.be")
-	//u, err := url.ParseRequestURI("http://hansamkt3iph6sbb.onion")
-	if err == nil {
-		myCrawler.ProcessUrl(u)
+	urls := []string{"http://torlinkbgs6aabns.onion/", "http://zqktlwi4fecvo6ri.onion/wiki/index.php/Main_Page", "http://w363zoq3ylux5rf5.onion/"}
 
-		signal := make(chan int, 1)
-
-		go func() {
-			<-quit
-			fmt.Println("Sending shutdown signal")
-			// Stop signaal sturen naar onze crawler
-			signal <- 1
-		}()
-
-		myCrawler.Start(signal)
-
-		// Crawler is gestopt
-	} else {
-		fmt.Println(err)
+	for _, str := range urls {
+		u, err := url.ParseRequestURI(str)
+		if err == nil {
+			myCrawler.ProcessUrl(u)
+		} else {
+			fmt.Println(err)
+		}
 	}
+
+	signal := make(chan int, 1)
+
+	go func() {
+		<-quit
+		fmt.Println("Sending shutdown signal")
+		// Stop signaal sturen naar onze crawler
+		signal <- 1
+	}()
+
+	myCrawler.Start(signal)
 }
