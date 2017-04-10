@@ -17,7 +17,7 @@ type ClearnetDistributor struct {
 
 func NewClearnetDistributor() *ClearnetDistributor {
 	client := &http.Client{Transport: &http.Transport{}, Timeout: time.Second * 30}
-	return &ClearnetDistributor{Client: client, Count: 200}
+	return &ClearnetDistributor{Client: client, Count: 3}
 }
 
 func (dist *ClearnetDistributor) GetClient() *http.Client {

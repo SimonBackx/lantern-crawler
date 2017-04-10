@@ -40,7 +40,7 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 
 	var wg sync.WaitGroup
 	crawler := &Crawler{cfg: cfg,
-		distributor:      NewTorDistributor(),
+		distributor:      NewClearnetDistributor(), //NewTorDistributor(),
 		context:          ctx,
 		cancelContext:    cancelCtx,
 		waitGroup:        wg,
@@ -75,7 +75,8 @@ func (crawler *Crawler) ProcessUrl(url *url.URL) {
 	} else {
 		// Geen concurrency problemen mogelijk
 		// AddItem kan item ook weggooien als die al gecrawled is
-		worker.AddItem(NewCrawlItem(url))
+		// Depth = nil, want dit is altijd van een externe host
+		worker.AddItem(NewCrawlItem(url), nil)
 
 		if !worker.Sleeping && !worker.Queue.IsEmpty() {
 			// Dit domein had geen items, maar nu wel
@@ -196,15 +197,20 @@ func (crawler *Crawler) Start(signal chan int) {
 				// Wachten tot alle goroutines afgelopen zijn die requests verwerken
 				crawler.waitGroup.Wait()
 
+				for _, worker := range crawler.Workers {
+					fmt.Printf("Remaining queue for %s\n", worker)
+					worker.RecrawlQueue.PrintQueue()
+				}
+
 				/*for _, domainCrawler := range crawler.DomainCrawlers {
 					crawler.cfg.LogInfo(fmt.Sprintf("Queue remaining for %v:", domainCrawler.Website.URL))
 					domainCrawler.Queue.PrintQueue()
 					fmt.Println()
 				}*/
 
-				crawler.cfg.LogInfo("Sleeping domains:")
+				/*crawler.cfg.LogInfo("Sleeping domains:")
 				crawler.SleepingCrawlers.Print()
-				fmt.Println()
+				fmt.Println()*/
 
 				crawler.cfg.LogInfo("The crawler has stopped")
 				return
