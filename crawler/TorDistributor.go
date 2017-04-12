@@ -16,7 +16,7 @@ type TorDistributor struct {
 
 func NewTorDistributor() *TorDistributor {
 	StartSocksPort := 9150
-	AvailableDaemons := 35
+	AvailableDaemons := 1 //35
 
 	daemonList := make([]*http.Client, AvailableDaemons)
 	for i := 0; i < AvailableDaemons; i++ {
@@ -45,7 +45,7 @@ func NewTorDistributor() *TorDistributor {
 
 	Clients := NewClientList()
 	// Beschikbaarheid per proxy
-	for k := 0; k < 80; k++ {
+	for k := 0; k < 5000; k++ {
 		for i := 0; i < AvailableDaemons; i++ {
 			Clients.Push(daemonList[i])
 		}

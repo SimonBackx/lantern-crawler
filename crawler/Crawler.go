@@ -40,14 +40,14 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 
 	var wg sync.WaitGroup
 	crawler := &Crawler{cfg: cfg,
-		distributor:      NewClearnetDistributor(), //NewTorDistributor(),
+		distributor:      NewTorDistributor(), //NewTorDistributor(),
 		context:          ctx,
 		cancelContext:    cancelCtx,
 		waitGroup:        wg,
 		Workers:          make(map[string]*Hostworker),
 		SleepingCrawlers: NewWorkerList(),
-		WorkerEnded:      make(chan *Hostworker, 1),
-		WorkerResult:     make(chan *WorkerResult, 1),
+		WorkerEnded:      make(chan *Hostworker, 10),
+		WorkerResult:     make(chan *WorkerResult, 50),
 		speedLogger:      NewSpeedLogger(),
 		Stop:             make(chan struct{}, 1),
 	}
@@ -56,29 +56,29 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 	return crawler
 }
 
-func (crawler *Crawler) ProcessUrl(url *url.URL) {
+func (crawler *Crawler) ProcessUrl(url *url.URL, source *url.URL) {
 	host := url.Hostname()
 	worker := crawler.Workers[host]
 
 	if worker == nil {
-		website := &Website{
-			URL: host,
-		}
-		worker = NewHostworker(website, crawler)
+		worker = NewHostworker(host, crawler)
 		crawler.Workers[host] = worker
 	}
 
 	// Crawler queue pushen
 	if worker.Running {
 		// Pushen d.m.v. channel om concurrency problemen te vermijden
-		worker.NewItems.stack(NewCrawlItem(url))
+		// todo: stack maken van url's ipv crawlitems
+		item := NewCrawlItem(url)
+		item.LastReferenceURL = source
+		worker.NewItems.stack(item)
 	} else {
 		// Geen concurrency problemen mogelijk
-		// AddItem kan item ook weggooien als die al gecrawled is
+		// NewReference kan url ook weggooien als die al gecrawled is
 		// Depth = nil, want dit is altijd van een externe host
-		worker.AddItem(NewCrawlItem(url), nil)
+		worker.NewReference(url, nil, source, nil)
 
-		if !worker.Sleeping && !worker.Queue.IsEmpty() {
+		if !worker.Sleeping && worker.WantsToGetUp() {
 			// Dit domein had geen items, maar nu wel
 			worker.Sleeping = true
 			crawler.SleepingCrawlers.Push(worker)
@@ -90,7 +90,7 @@ func (crawler *Crawler) WakeSleepingWorkers() {
 	for crawler.SleepingCrawlers.First != nil {
 		worker := crawler.SleepingCrawlers.First.Worker
 
-		if worker.Queue.IsEmpty() {
+		if !worker.WantsToGetUp() {
 			crawler.Panic("Worker " + worker.String() + " heeft lege queue maar staat in sleeping crawlers")
 			return
 		}
@@ -159,7 +159,7 @@ func (crawler *Crawler) Start(signal chan int) {
 
 			// De worker die is gaan slapen terug toevoegen
 			// als die nog items heeft, anders stellen we dit uit tot we weer items vinden
-			if !worker.Queue.IsEmpty() {
+			if worker.WantsToGetUp() {
 				worker.Sleeping = true
 				crawler.SleepingCrawlers.Push(worker)
 			}
@@ -175,7 +175,7 @@ func (crawler *Crawler) Start(signal chan int) {
 
 			// 1. URL's
 			for _, url := range result.Links {
-				crawler.ProcessUrl(url)
+				crawler.ProcessUrl(url, result.Source)
 			}
 
 			// 2. Andere data (voor later)
@@ -197,10 +197,15 @@ func (crawler *Crawler) Start(signal chan int) {
 				// Wachten tot alle goroutines afgelopen zijn die requests verwerken
 				crawler.waitGroup.Wait()
 
+				crawler.cfg.LogInfo("Saving progress...")
 				for _, worker := range crawler.Workers {
+					worker.SaveToFile()
+				}
+
+				/*for _, worker := range crawler.Workers {
 					fmt.Printf("Remaining queue for %s\n", worker)
 					worker.RecrawlQueue.PrintQueue()
-				}
+				}*/
 
 				/*for _, domainCrawler := range crawler.DomainCrawlers {
 					crawler.cfg.LogInfo(fmt.Sprintf("Queue remaining for %v:", domainCrawler.Website.URL))

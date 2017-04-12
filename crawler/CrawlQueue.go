@@ -41,6 +41,11 @@ func (queue *CrawlQueue) Pop() *CrawlItem {
 }
 
 func (queue *CrawlQueue) Push(item *CrawlItem) {
+	if item.Queue != nil {
+		fmt.Println("PANIC! pushed already queued item on queue")
+		return
+	}
+	item.Queue = queue
 	item.Next = nil
 	item.Previous = nil
 

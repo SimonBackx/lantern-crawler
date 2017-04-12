@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-const maxRecrawlDepth = 5
+const maxRecrawlDepth = 3
 
 /**
  * Een recrawl queue houdt referenties bij naar de pagina's van een website
@@ -36,6 +36,7 @@ func (r *RecrawlQueue) Push(item *CrawlItem) {
 	r.Depths[item.Depth].Push(item)
 }
 
+// Popt alleen als een recrawl nodig is
 func (r *RecrawlQueue) Pop() *CrawlItem {
 	for _, queue := range r.Depths {
 		if queue.First != nil && queue.First.NeedsRecrawl() {
