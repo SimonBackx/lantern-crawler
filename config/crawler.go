@@ -6,7 +6,14 @@ import (
 )
 
 type CrawlerConfig struct {
-	TorProxyAddress *string
+	UseTorProxy   bool
+	OnlyOnion     bool
+	LoadFromFiles bool
+	SaveToFiles   bool
+	MaxDomains    int /// 0 = infinite
+
+	LogRecrawlingEnabled bool
+	LogGoroutinesEnabled bool
 }
 
 func (cfg *CrawlerConfig) LogError(err error) {

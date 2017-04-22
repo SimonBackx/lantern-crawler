@@ -42,40 +42,6 @@ func (list *WorkerList) Push(worker *Hostworker) {
 	}
 }
 
-/*func (list *WorkerList) PushSorted(worker *Hostworker) {
-	if worker.IntroductionPoints.IsEmpty() {
-		return
-	}
-
-	item := NewWorkerItem(worker)
-
-	if list.First != nil {
-		// Overlopen en sorteren op lastDownload van het eerste inroduction point.
-		// Volgorde van oud > nieuw
-		var prev *WorkerItem
-		next := list.First
-		for next != nil && next.Worker.IntroductionPoints.First.LastDownload.Before(worker.IntroductionPoints.First.LastDownload) {
-			prev = next
-			next = next.Next
-		}
-
-		if prev == nil {
-			list.First = item
-		} else {
-			prev.Next = item
-		}
-		item.Next = next
-
-		if next == nil {
-			list.Last = item
-		}
-	} else {
-		// Gewoon toevoegen als enige item
-		list.Last = item
-		list.First = item
-	}
-}*/
-
 func (list *WorkerList) Pop() *Hostworker {
 	result := list.First
 	if result != nil {

@@ -1,13 +1,10 @@
 package crawler
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"github.com/SimonBackx/master-project/config"
-	//"golang.org/x/net/proxy"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -53,9 +50,16 @@ type Crawler struct {
 func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
+	var distributor ClientDistributor
+	if cfg.UseTorProxy {
+		distributor = NewTorDistributor()
+	} else {
+		distributor = NewClearnetDistributor()
+	}
+
 	var wg sync.WaitGroup
 	crawler := &Crawler{cfg: cfg,
-		distributor:        NewClearnetDistributor(),
+		distributor:        distributor,
 		context:            ctx,
 		cancelContext:      cancelCtx,
 		waitGroup:          wg,
@@ -71,6 +75,10 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 		Queries:            make([]*Query, 0),
 	}
 	crawler.speedLogger.Crawler = crawler
+
+	if !cfg.LoadFromFiles {
+		return crawler
+	}
 
 	// Read from files
 	files, _ := ioutil.ReadDir("./progress")
@@ -107,8 +115,7 @@ func (crawler *Crawler) ProcessUrl(url *url.URL, source *url.URL) {
 	worker := crawler.Workers[host]
 
 	if worker == nil {
-		if len(crawler.Workers) > 1 {
-			// Debug: maximum aantal domains
+		if crawler.cfg.MaxDomains != 0 && len(crawler.Workers) >= crawler.cfg.MaxDomains {
 			return
 		}
 
@@ -179,16 +186,21 @@ func (crawler *Crawler) WakeSleepingWorkers() {
 
 func (crawler *Crawler) SetRecrawlFirst(worker *Hostworker) {
 	duration := worker.GetRecrawlDuration()
+
 	// Minimale wachttijd
-	if duration < time.Second*5 {
-		duration = time.Second * 5
+	if duration < 0 {
+		duration = 0
 	}
 
-	crawler.RecrawlTimer = time.After(duration)
+	// Minimaal 5 seconden wachten en zoveel mogelijk combineren door
+	// 5 seconden langer te wachten
+	crawler.RecrawlTimer = time.After(duration + time.Second*5)
 }
 
 func (crawler *Crawler) AddRecrawlList(worker *Hostworker) {
-	crawler.cfg.LogInfo("Added to recrawl list: " + worker.String())
+	if crawler.cfg.LogRecrawlingEnabled {
+		crawler.cfg.LogInfo("Added to recrawl list: " + worker.String())
+	}
 
 	if crawler.RecrawlList.IsEmpty() {
 		crawler.SetRecrawlFirst(worker)
@@ -199,7 +211,9 @@ func (crawler *Crawler) AddRecrawlList(worker *Hostworker) {
 }
 
 func (crawler *Crawler) CheckRecrawlList() {
-	crawler.cfg.LogInfo("Check recrawl list")
+	if crawler.cfg.LogRecrawlingEnabled {
+		crawler.cfg.LogInfo("Check recrawl list")
+	}
 
 	for crawler.RecrawlList.First != nil {
 		if crawler.RecrawlList.First.Worker.GetRecrawlDuration() > 0 {
@@ -250,26 +264,14 @@ func (crawler *Crawler) Quit() {
 	// Wachten tot alle goroutines afgelopen zijn die requests verwerken
 	crawler.waitGroup.Wait()
 
-	crawler.cfg.LogInfo("Saving progress...")
-	// Tijdelijk uitgeschakeld voor debugging
-	/*for _, worker := range crawler.Workers {
-		worker.SaveToFile()
-	}*/
-
-	/*for _, worker := range crawler.Workers {
-		fmt.Printf("Remaining queue for %s\n", worker)
-		worker.RecrawlQueue.PrintQueue()
-	}*/
-
-	/*for _, domainCrawler := range crawler.DomainCrawlers {
-		crawler.cfg.LogInfo(fmt.Sprintf("Queue remaining for %v:", domainCrawler.Website.URL))
-		domainCrawler.Queue.PrintQueue()
-		fmt.Println()
-	}*/
-
-	/*crawler.cfg.LogInfo("Sleeping domains:")
-	crawler.SleepingCrawlers.Print()
-	fmt.Println()*/
+	if crawler.cfg.SaveToFiles {
+		crawler.cfg.LogInfo("Saving progress...")
+		for _, worker := range crawler.Workers {
+			worker.SaveToFile()
+		}
+	} else {
+		crawler.cfg.LogInfo("Progress saving disabled (cfg.SaveToFiles = false).")
+	}
 
 	crawler.cfg.LogInfo("The crawler has stopped")
 }
@@ -300,7 +302,10 @@ func (crawler *Crawler) Start(signal chan int) {
 	for {
 		select {
 		case worker := <-crawler.WorkerEnded:
-			crawler.cfg.LogInfo("Goroutine for host " + worker.String() + " stopped")
+			if crawler.cfg.LogGoroutinesEnabled {
+				crawler.cfg.LogInfo("Goroutine for host " + worker.String() + " stopped")
+			}
+
 			worker.Running = false
 
 			if worker.RecrawlOnFinish {
@@ -326,7 +331,6 @@ func (crawler *Crawler) Start(signal chan int) {
 			crawler.WakeSleepingWorkers()
 
 		case result := <-crawler.WorkerResult:
-			//crawler.cfg.LogInfo("Resultaat van worker ontvangen")
 			// Resultaat van een worker verwerken
 
 			// 1. URL's
@@ -357,10 +361,4 @@ func (crawler *Crawler) Start(signal chan int) {
 		}
 
 	}
-}
-
-func PrintHeader(header *http.Header) {
-	buffer := bytes.NewBufferString("")
-	header.Write(buffer)
-	fmt.Println(buffer.String())
 }

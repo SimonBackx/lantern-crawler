@@ -113,20 +113,9 @@ func (i *CrawlItem) NeedsRecrawl() bool {
 		return false
 	}
 
-	// Todo: geavanceerder maken
-
-	if i.Depth == 0 {
-		// Introduction points moeten even langer wachten voor ze opnieuw mogen worden gerecrawld
-		t := 30 * time.Minute
-		answer := time.Since(*i.LastDownload) > t //time.Hour
-
-		return answer
-	}
-
-	// Alle andere mogen altijd opnieuw gecrawld worden,
-	// zolang ze maar vanaf een lagere depth worden verwezen
-
-	return true
+	// Een pagina maar opnieuw crawlen na 30 minuten. Dit moet altijd
+	// veel lager liggen dan het recrawl interval!
+	return time.Since(*i.LastDownload) > 30*time.Minute
 }
 
 /**
