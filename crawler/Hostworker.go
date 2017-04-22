@@ -4,19 +4,22 @@ import (
 	//"bytes"
 	//"fmt"
 	"github.com/PuerkitoBio/purell"
-	"github.com/SimonBackx/master-project/parser"
 	//"github.com/deckarep/golang-set"
 	"io"
 	"math/rand"
 	"net/http"
 	"net/url"
-	//"regexp"
+	"regexp"
 	"strings"
 	//"sync"
 	"bufio"
+	"bytes"
+	"context"
 	"os"
 	"time"
 )
+
+const maxRecrawlDepth = 2
 
 type Hostworker struct {
 	Host string
@@ -38,7 +41,7 @@ type Hostworker struct {
 	// staan vooraan in de wachtrij. Regelmatig controleren we of het eerste item ouder is dan 12 uur.
 	// als dat zo is, halen we deze uit de lijst en verwijderen we deze uit AlreadyVisited om het opnieuw een kans te geven
 	// om gecrawled te worden.
-	//FailedQueue *CrawlQueue
+	FailedQueue *LeveledQueue
 
 	// Hierin staan alle items die aanwezig zijn in Queue of PriorityQueue
 	// OF items die niet aanwezig zijn in die queue's, maar die nog niet gedownload mogen worden
@@ -51,8 +54,10 @@ type Hostworker struct {
 	// van laatste gedownload naar meest recent gedownload
 	IntroductionPoints *CrawlQueue
 
-	Running  bool // Of goroutine loopt
-	Sleeping bool // Of deze worker in de sleeping queue aanwezig is
+	Running         bool // Of goroutine loopt
+	Sleeping        bool // Of deze worker in de sleeping queue aanwezig is
+	InRecrawlList   bool
+	RecrawlOnFinish bool // Enkel aanpassen of opvragen buiten de goroutine v/d worker
 
 	Client   *http.Client
 	stop     chan struct{}
@@ -75,7 +80,7 @@ func (w *Hostworker) String() string {
  */
 func (w *Hostworker) SaveToFile() {
 	os.Mkdir("progress", 0777)
-	file, err := os.Create("progress/" + w.Host + ".txt")
+	file, err := os.Create("./progress/host_" + w.Host + ".txt")
 	if err != nil {
 		w.crawler.cfg.LogError(err)
 		return
@@ -86,50 +91,79 @@ func (w *Hostworker) SaveToFile() {
 
 	writer := bufio.NewWriter(file)
 	writer.WriteString(w.String())
-	writer.WriteString("\nIntroduction points:\n")
+	writer.WriteString("\n")
 
-	item := w.IntroductionPoints.First
-	for item != nil {
-		writer.WriteString("\n")
-		writer.WriteString(item.SaveToString())
-		item = item.Next
-	}
+	w.IntroductionPoints.SaveToWriter(writer)
+	writer.WriteString("\n")
 
-	writer.WriteString("\nPriority:\n")
-	item = w.PriorityQueue.First
-	for item != nil {
-		writer.WriteString("\n")
-		writer.WriteString(item.SaveToString())
-		item = item.Next
-	}
+	w.PriorityQueue.SaveToWriter(writer)
+	writer.WriteString("\n")
 
-	writer.WriteString("\nQueue:\n")
-	item = w.Queue.First
-	for item != nil {
-		writer.WriteString("\n")
-		writer.WriteString(item.SaveToString())
-		item = item.Next
-	}
-	writer.WriteString("\nLow Priority:\n")
-	item = w.LowPriorityQueue.First
-	for item != nil {
-		writer.WriteString("\n")
-		writer.WriteString(item.SaveToString())
-		item = item.Next
-	}
+	// Failed queue gewoon toevoegen aan queue
+	w.Queue.SaveToWriter(writer)
+	w.FailedQueue.SaveToWriter(writer)
 
-	// todo: introduction points
+	writer.WriteString("\n")
+
+	w.LowPriorityQueue.SaveToWriter(writer)
 
 	writer.Flush()
+}
+
+func NewHostWorkerFromFile(file *os.File, crawler *Crawler) *Hostworker {
+	reader := bufio.NewReader(file)
+	host, _, err := reader.ReadLine()
+	if len(host) == 0 || err != nil {
+		crawler.cfg.LogInfo("Invalid file")
+		return nil
+	}
+	//crawler.cfg.LogInfo("Reading " + string(host) + "...")
+
+	w := NewHostworker(string(host), crawler)
+	w.IntroductionPoints.ReadFromReader(reader)
+	w.FillAlreadyVisited(w.IntroductionPoints)
+
+	w.PriorityQueue.ReadFromReader(reader)
+	w.FillAlreadyVisited(w.PriorityQueue)
+
+	w.Queue.ReadFromReader(reader)
+	w.FillAlreadyVisited(w.Queue)
+
+	w.LowPriorityQueue.ReadFromReader(reader)
+	w.FillAlreadyVisited(w.LowPriorityQueue)
+
+	return w
+}
+
+func (w *Hostworker) FillAlreadyVisited(q *CrawlQueue) {
+	item := q.First
+	for item != nil {
+		uri, err := cleanURLPath(item.URL)
+		if err == nil {
+			w.AlreadyVisited[uri] = item
+		}
+		item = item.Next
+	}
+}
+
+func (w *Hostworker) GetRecrawlDuration() time.Duration {
+	if w.IntroductionPoints.IsEmpty() {
+		w.crawler.Panic("GetRecrawlDuration on worker with empty IntroductionPoints!")
+		return time.Minute * 5
+	}
+	duration := time.Second*30 - time.Since(*w.IntroductionPoints.First.LastDownload)
+
+	return duration
 }
 
 func NewHostworker(host string, crawler *Crawler) *Hostworker {
 	w := &Hostworker{
 		Host:               host,
-		Queue:              NewCrawlQueue(),
-		PriorityQueue:      NewCrawlQueue(),
-		LowPriorityQueue:   NewCrawlQueue(),
-		IntroductionPoints: NewCrawlQueue(),
+		Queue:              NewCrawlQueue("Queue"),
+		PriorityQueue:      NewCrawlQueue("Priority Queue"),
+		LowPriorityQueue:   NewCrawlQueue("Low Priority Queue"),
+		IntroductionPoints: NewCrawlQueue("Intoroduction points"),
+		FailedQueue:        NewLeveledQueue(),
 
 		AlreadyVisited: make(map[string]*CrawlItem),
 		NewItems:       newPopChannel(),
@@ -162,6 +196,21 @@ func (w *Hostworker) AddQueue(q *CrawlQueue) {
 	}
 }
 
+func (w *Hostworker) Recrawl() {
+	w.crawler.cfg.LogInfo("Recrawl initiated for " + w.String())
+
+	//w.crawler.cfg.LogInfo("Recrawl for host " + w.String@() + " initiated")
+	// Recrawl nodig! -> Alles toevoegen aan de priority queue
+	item := w.IntroductionPoints.First
+	for item != nil {
+		next := item.Next
+		item.Remove()
+		w.PriorityQueue.Push(item)
+
+		item = next
+	}
+}
+
 func (w *Hostworker) Run(client *http.Client) {
 	defer func() {
 		// Aangeven dat deze goroutine afgelopen is
@@ -171,25 +220,12 @@ func (w *Hostworker) Run(client *http.Client) {
 		w.crawler.WorkerEnded <- w
 	}()
 
-	//w.crawler.cfg.LogInfo("Goroutine for host " + w.String() + " started")
+	w.crawler.cfg.LogInfo("Goroutine for host " + w.String() + " started")
 
 	w.Client = client
 
 	// Snel horizontaal uitbreiden: neem laag getal
-	w.sleepAfter = rand.Intn(60) + 1
-
-	if w.IntroductionPoints.First != nil && w.IntroductionPoints.First.NeedsRecrawl() {
-		w.crawler.cfg.LogInfo("Recrawl for host " + w.String() + " initiated")
-		// Recrawl nodig! -> Alles toevoegen aan de priority queue
-		item := w.IntroductionPoints.First
-		for item != nil {
-			next := item.Next
-			item.Remove()
-			w.PriorityQueue.Push(item)
-
-			item = next
-		}
-	}
+	w.sleepAfter = 200 //rand.Intn(60) + 1
 
 	for {
 		select {
@@ -208,7 +244,6 @@ func (w *Hostworker) Run(client *http.Client) {
 
 			w.RequestStarted(item)
 			w.Request(item)
-			w.RequestFinished(item)
 
 			if w.sleepAfter <= 0 {
 				// Meteen stoppen
@@ -216,35 +251,125 @@ func (w *Hostworker) Run(client *http.Client) {
 			}
 
 			// Onderstaande kansverdeling moet nog minder uniform gemaakt worden
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(4000)))
+			time.Sleep(time.Millisecond*time.Duration(rand.Intn(4000)) + 1000)
 		}
 	}
 }
-func (w *Hostworker) Request(item *CrawlItem) {
-	// Ongeacht gelukt / mislukt (is noodzakelijk detectie verdwenen referenties)
-	item.DownloadCount++
 
+func readFirstBytes(r io.Reader) ([]byte, error) {
+	b := make([]byte, 512, 512)
+	n, err := r.Read(b)
+	if err == io.EOF {
+		// done, maar snij onze byte slice bij om lege (niet ingelezen)
+		// bytes te verwijderen
+		return b[:n], nil
+	}
+
+	if err != nil {
+		return b, err
+	}
+
+	// Er valt nog verder te lezen
+	return b, nil
+}
+
+// readRemaining reads from r until an error or EOF and returns the data it read
+// from the internal buffer allocated with the already read bytes
+func readRemaining(r io.Reader, alreadyRead []byte) (reader io.Reader, err error) {
+	buf := bytes.NewBuffer(alreadyRead)
+	// If the buffer overflows, we will get bytes.ErrTooLarge.
+	// Return that as an error. Any other panic remains.
+	defer func() {
+		e := recover()
+		if e == nil {
+			return
+		}
+		if panicErr, ok := e.(error); ok && panicErr == bytes.ErrTooLarge {
+			err = panicErr
+		} else {
+			panic(e)
+		}
+	}()
+	_, err = buf.ReadFrom(r)
+
+	return bytes.NewReader(buf.Bytes()), err
+}
+
+func (w *Hostworker) Request(item *CrawlItem) {
 	var reader io.Reader
 	/*if item.Body != nil {
 		reader = strings.NewReader(*item.Body)
 	}*/
+	//idleChan := time.After(10 * time.Second)
+
+	cx, cancel := context.WithCancel(context.Background())
+	ref := &cancel
 
 	if request, err := http.NewRequest("GET", item.URL.String(), reader); err == nil {
 		request.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1; rv:45.0) Gecko/20100101 Firefox/45.0")
 		request.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 		request.Header.Add("Accept_Language", "en-US,en;q=0.5")
-		request.Header.Add("Connection", "keep-alive")
+		//request.Header.Add("Connection", "keep-alive")
 
-		request.Close = true // Connectie weggooien
-		request = request.WithContext(w.crawler.context)
+		request.Close = true              // Connectie weggooien
+		request = request.WithContext(cx) //request.WithContext(w.crawler.context)
+		go func() {
+			time.Sleep(3 * time.Second)
+			c := ref
+			if c != nil {
+				w.crawler.speedLogger.Timeouts++
+				(*c)()
+			} else {
+			}
+		}()
 
 		if response, err := w.Client.Do(request); err == nil {
-			w.ProcessResponse(item, response)
-		} else {
-			if response != nil && response.Body != nil {
-				response.Body.Close()
+			defer response.Body.Close()
+			ref = nil
+
+			if response.ContentLength > 1000000 {
+				//w.crawler.cfg.LogInfo("Response: Content too long")
+				// Too big
+				// Eventueel op een ignore list zetten
+				return
 			}
 
+			// Eerste 512 bytes lezen om zo de contentType te bepalen
+			b, err := readFirstBytes(response.Body)
+			if err != nil {
+				// Er ging iets mis
+				w.crawler.cfg.LogError(err)
+				w.RequestFailed(item)
+				return
+			}
+
+			// Content type inlezen, als die niet goed zit stoppen...
+			contentType := http.DetectContentType(b)
+			//w.crawler.cfg.LogInfo("Detected Content-Type: " + contentType)
+
+			if contentType != "text/html; charset=utf-8" {
+				//w.crawler.cfg.LogInfo("Not a HTML file")
+				// Op ignore list zetten
+				return
+			}
+
+			// Rest inlezen
+			reader, err := readRemaining(response.Body, b)
+			if err != nil {
+				// Er ging iets mis
+				w.crawler.cfg.LogError(err)
+				w.RequestFailed(item)
+				return
+			}
+
+			w.ProcessResponse(item, response, reader)
+		} else {
+			if response != nil && response.Body != nil {
+				//w.crawler.cfg.LogError(err)
+				response.Body.Close()
+			}
+			w.RequestFailed(item)
+			//w.crawler.cfg.LogError(err)
 			//w.crawler.cfg.LogError(err)
 			/*if urlErr, ok := err.(*url.Error); ok {
 			      if netOpErr, ok := urlErr.Err.(*net.OpError); ok && netOpErr.Timeout() {
@@ -258,12 +383,12 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			  fmt.Printf("%v, %T\n", err, err)*/
 		}
 	} else {
-		//w.crawler.cfg.LogError(err)
+
+		w.RequestFailed(item)
 	}
 }
 
-func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response) {
-	defer response.Body.Close()
+func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, reader io.Reader) {
 
 	requestUrl := *response.Request.URL
 	urlRef := &requestUrl
@@ -271,12 +396,13 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response) {
 	/*buf := new(bytes.Buffer)
 	buf.ReadFrom(response.Body)
 	w.crawler.cfg.LogInfo(buf.String()) // Does a complete copy of the bytes in the buffer.*/
-	parsers := []parser.IParser{&parser.LinkParser{}}
 
 	// Doorgeven aan parser
-	result, err := parser.Parse(response.Body, parsers)
+	result, err := Parse(reader, w.crawler.Queries)
 
 	if err != nil {
+		//w.crawler.cfg.LogError(err)
+		w.RequestFailed(item)
 		/*if _, ok := err.(parser.ParseError); ok {
 			w.crawler.cfg.LogError(err)
 		} else {
@@ -284,6 +410,10 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response) {
 			w.crawler.cfg.LogError(err)
 		}*/
 		return
+	}
+
+	for _, query := range result.Queries {
+		w.crawler.cfg.LogInfo("Found " + query.String() + " at " + w.String() + item.String())
 	}
 
 	workerResult := NewWorkerResult()
@@ -317,6 +447,13 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response) {
 				}
 			}*/
 
+			// Alle invalid characters verwijderen
+			reg := regexp.MustCompile("[^\\^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ,.\\-!/()=?`*;:_{}[]\\|~]+")
+			u, err := url.Parse(reg.ReplaceAllString(u.String(), ""))
+			if err != nil {
+				break
+			}
+
 			normalized := purell.NormalizeURL(u,
 				purell.FlagsSafe|purell.FlagRemoveFragment)
 
@@ -336,29 +473,67 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response) {
 		}
 	}
 
-	now := time.Now()
-	item.LastDownload = &now
-
 	// Resultaat doorgeven aan Crawler
 	if len(workerResult.Links) > 0 {
+		//w.crawler.cfg.LogInfo("Resultaat van worker verzonden " + w.String())
 		w.crawler.WorkerResult <- workerResult
 	}
 
-	w.crawler.speedLogger.Log()
+	w.RequestFinished(item)
 }
 
 func (w *Hostworker) RequestStarted(item *CrawlItem) {
-	//w.crawler.cfg.LogInfo(fmt.Sprintf("Request started. URL = %v", item.URL.String()))
+	// Ongeacht gelukt / mislukt (is noodzakelijk detectie verdwenen referenties)
+	w.sleepAfter--
+	item.DownloadCount++
 
+	//w.crawler.cfg.LogInfo(fmt.Sprintf("Request started. URL = %v", item.URL.String()))
+	now := time.Now()
+	item.LastDownloadStarted = &now
 }
 
 func (w *Hostworker) RequestFinished(item *CrawlItem) {
+	//w.crawler.cfg.LogInfo(fmt.Sprintf("Request finished. URL = %v", item.URL.String()))
 	if item.Depth == 0 {
 		// Introduction point toevoegen
-		w.IntroductionPoints.Push(item)
+		if w.IntroductionPoints.IsEmpty() {
+			w.IntroductionPoints.Push(item)
+
+			// Crawler verwittigen zodat we op de recrawl lijst komen
+			w.crawler.WorkerIntroduction <- w
+		} else {
+			w.IntroductionPoints.Push(item)
+		}
+
 	}
+
+	if item.FailCount > 0 {
+		item.FailCount = 0
+		w.crawler.speedLogger.LogSuccessfulRetry()
+	}
+
+	if item.LastDownload != nil {
+		// Recrawl
+		w.crawler.speedLogger.RecrawlCount++
+	}
+
+	now := time.Now()
+	item.LastDownload = &now
+
+	w.crawler.speedLogger.Log()
 	//w.crawler.cfg.LogInfo(fmt.Sprintf("Request finished. URL = %v", item.URL.String()))
-	w.sleepAfter--
+}
+
+func (w *Hostworker) RequestFailed(item *CrawlItem) {
+	item.FailCount++
+	if !item.IsUnavailable() {
+		// We wagen nog een poging binnen een uurtje
+		// Toevoegen aan failqueue
+		w.FailedQueue.Push(item, item.FailCount)
+		w.crawler.speedLogger.NewFailedQueue++
+	} else {
+		w.crawler.speedLogger.LogUnavailable()
+	}
 }
 
 func (w *Hostworker) InMemory() bool {
@@ -366,22 +541,30 @@ func (w *Hostworker) InMemory() bool {
 }
 
 func (w *Hostworker) GetNextRequest() *CrawlItem {
+	f := w.FailedQueue.Pop()
+	if f != nil {
+		w.crawler.speedLogger.PoppedFromFailedQueue++
+		return f
+	}
 	if !w.PriorityQueue.IsEmpty() {
+		w.crawler.speedLogger.PoppedFromPriorityQueue++
 		return w.PriorityQueue.Pop()
 	}
 	if !w.Queue.IsEmpty() {
+		w.crawler.speedLogger.PoppedFromQueue++
 		return w.Queue.Pop()
 	}
 
+	if w.LowPriorityQueue.IsEmpty() {
+		return nil
+	}
+
+	w.crawler.speedLogger.PoppedFromLowPriorityQueue++
 	return w.LowPriorityQueue.Pop()
 }
 
-/**
- * Er werd een referentie gevonden naar een URL voor deze host
- * depth = nil als het van externe host komt. Anders is depth de diepte van het item waarvan de referentei afkomstig is
- */
-func (w *Hostworker) NewReference(foundUrl *url.URL, depth *int, source *url.URL, sourceItem *CrawlItem) {
-	normalized := purell.NormalizeURL(foundUrl,
+func cleanURLPath(u *url.URL) (string, error) {
+	normalized := purell.NormalizeURL(u,
 		purell.FlagDecodeUnnecessaryEscapes|
 			purell.FlagUppercaseEscapes|
 			purell.FlagEncodeNecessaryEscapes|
@@ -391,25 +574,31 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, depth *int, source *url.URL
 			purell.FlagRemoveEmptyPortSeparator|
 			purell.FlagRemoveTrailingSlash)
 
-	u, err := url.ParseRequestURI(normalized)
+	clean, err := url.ParseRequestURI(normalized)
 
+	if err != nil {
+		return "", err
+	}
+
+	return clean.EscapedPath(), nil
+}
+
+/**
+ * Er werd een referentie gevonden naar een URL voor deze host
+ * depth = nil als het van externe host komt. Anders is depth de diepte van het item waarvan de referentei afkomstig is
+ */
+func (w *Hostworker) NewReference(foundUrl *url.URL, depth *int, source *url.URL, sourceItem *CrawlItem) {
+	uri, err := cleanURLPath(foundUrl)
 	if err != nil {
 		w.crawler.cfg.LogError(err)
 		return
 	}
 
-	uri := u.EscapedPath()
-
 	item, found := w.AlreadyVisited[uri]
 	if !found {
 		item = NewCrawlItem(foundUrl)
 		w.AlreadyVisited[uri] = item
-	}
-
-	// Staat deze al in de queue?
-	inQueue := false
-	if item.Queue == w.Queue || item.Queue == w.PriorityQueue || item.Queue == w.LowPriorityQueue {
-		inQueue = true
+		w.crawler.speedLogger.NewURLsCount++
 	}
 
 	now := time.Now()
@@ -429,48 +618,45 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, depth *int, source *url.URL
 		}
 	}
 
-	if depth != nil && sourceItem != nil && sourceItem.Depth > item.Depth && item.DownloadCount < sourceItem.DownloadCount && item.LastDownload != nil {
-		// Het kan zijn dat dit item niet meer gerefereerd werd door een pagina met lagere depth,
-		// sinds zijn laatste download
-		// In dat geval is de referentie verdwenen, aangezien alle pagina's met een lagere depth gegarandeerd
-		// eerder werden gerecrawld
-		// en de referentie dus opnieuw had moeten worden gevonden
-		//
-		// Dit mag enkel effect hebben als het item in de priority queue terecht hoort, maar nu niet meer
-		//if (*item.LastReference).Sub(*item.LastDownload) < 0 {
-		// Er werd geen nieuwe referentie gevonden na de laatste download
-		// lastReference is dus kleiner dan lastDownload
-		w.crawler.cfg.LogInfo("Referentie naar " + uri + " (" + w.Host + ") ging verloren")
+	if depth != nil && sourceItem != nil && item.Depth < maxRecrawlDepth && sourceItem.Depth > item.Depth && item.DownloadCount < sourceItem.DownloadCount && item.LastDownload != nil {
+		// Het systeem is zo ontworpen dat een item in de priority queue enkel wordt gedownload nadat alle websites die er oorspronkelijk naar verwezen (met een lagere depth)
+		// zijn gecrawled.
+		// Hierdoor kunnen we verdwenen referenties detecteren in de priority queue. Verdwenen referenties in de gewone queue
+		// zijn niet relevant aangezien die de gebruikte queue niet beïnvloeden.
+		// Als een website met een hogere diepte verwijst naar een website met een lagere diepte, en als blijkt dat die website minder werd gedownload,
+		// dan is er een referentie verloren.
+		// Het kan ook gewoon zijn dat de pagina met de referentie bij de download onbereikbaar was en in de failedqueue staat, in dat geval
+		// wordt die toch opnieuw gedownload  en als die nog bestaat zal de diepte terug worden aangepast naar een lagere diepte
+
+		//w.crawler.cfg.LogInfo("Referentie naar " + uri + " (" + w.Host + ") ging verloren")
 		item.Depth = *depth + 1
 		item.LastReference = &now
 		item.LastReferenceURL = source
-		//}
 	}
 
-	if inQueue {
-		if item.Depth < maxRecrawlDepth && (item.Queue == w.Queue || item.Queue == w.LowPriorityQueue) {
-			w.crawler.cfg.LogInfo("Item " + uri + " (" + w.Host + ") had lage prioriteit, maar is nu hoge prioriteit")
-			// Dit item staat nog in de gewone queue, maar heeft nu wel prioriteit
-			// we verplaatsen het
-			item.Remove()
-			w.PriorityQueue.Push(item)
-		}
-	} else if !found || (item.NeedsRecrawl() && item.LastReference == &now) {
-		if item.Queue != nil {
-			// Kan zijn dat dit item in de introductionpoints queue staat
-			// Recrawl zal dan de volgende goroutine gestart worden
-			return
-		}
-		// Enkel recrawl toelaten van referentie van lagere depth
+	if item.Depth < maxRecrawlDepth && (item.Queue == w.Queue || item.Queue == w.LowPriorityQueue) {
+		//w.crawler.cfg.LogInfo("Item " + uri + " (" + w.Host + ") had lage prioriteit, maar is nu hoge prioriteit")
+		// Dit item staat nog in de gewone queue, maar heeft nu wel prioriteit
+		// we verplaatsen het
+		item.Remove()
+		w.PriorityQueue.Push(item)
 
+		w.crawler.speedLogger.SwitchesToPriority++
+
+	} else if item.Queue == nil && (!found || (item.NeedsRecrawl() && item.LastReference == &now)) {
+		// Enkel recrawl toelaten van referentie van lagere depth
 		// Staat niet in een queue maar heeft wel een recrawl nodig
+
 		if item.Depth < maxRecrawlDepth {
 			w.PriorityQueue.Push(item)
+			w.crawler.speedLogger.NewPriorityQueue++
 		} else {
 			if !found {
 				w.Queue.Push(item)
+				w.crawler.speedLogger.NewQueue++
 			} else {
 				w.LowPriorityQueue.Push(item)
+				w.crawler.speedLogger.NewLowPriorityQueue++
 			}
 		}
 	}

@@ -1,8 +1,7 @@
-package parser
+package crawler
 
 import (
 	"bytes"
-	"github.com/SimonBackx/master-project/crawler"
 	"github.com/andybalholm/cascadia"
 	"golang.org/x/net/html"
 	"io"
@@ -12,27 +11,16 @@ import (
 )
 
 type ParseResult struct {
-	Success bool
-	Retry   bool // Opnieuw proberen met opgegeven ErrorParser
-	Listing *Listing
 	Links   []*Link
-	Queries []*crawler.Query
+	Queries []*Query
 }
 
-func byteArrayToString(b []byte) string {
-	return strings.TrimSpace(string(b))
-}
-
-type ParseError struct {
-	msg string
-}
-
-func (e ParseError) Error() string {
-	return e.msg
-}
+/*func byteArrayToString(b []byte) string {
+    return strings.TrimSpace(string(b))
+}*/
 
 // Momenteel nog geen return value, dat is voor later
-func Parse(reader io.Reader, parsers []IParser, queries []*crawler.Query) (*ParseResult, error) {
+func Parse(reader io.Reader, queries []*Query) (*ParseResult, error) {
 
 	htmlDoc, err := html.Parse(reader)
 	if err != nil {
@@ -40,18 +28,14 @@ func Parse(reader io.Reader, parsers []IParser, queries []*crawler.Query) (*Pars
 	}
 
 	/*var buffer bytes.Buffer
-	b := &buffer
-	err2 := html.Render(b, htmlDoc)
-	if err2 != nil {
-		return nil, err2
-	}*/
+	  b := &buffer
+	  err2 := html.Render(b, htmlDoc)
+	  if err2 != nil {
+	      return nil, err2
+	  }*/
 	result := &ParseResult{}
 
-	for _, parser := range parsers {
-		if !parser.MatchDocument(htmlDoc, result) {
-			return nil, ParseError{"Error in parsing"}
-		}
-	}
+	FindLinks(htmlDoc, result)
 
 	str := NodeToText(htmlDoc)
 
@@ -66,11 +50,15 @@ func Parse(reader io.Reader, parsers []IParser, queries []*crawler.Query) (*Pars
 	return result, nil
 }
 
-func FindLinks(document *html.Node, result *ParseResult) bool {
+type Link struct {
+	Href url.URL
+}
+
+func FindLinks(document *html.Node, result *ParseResult) {
 	selector := cascadia.MustCompile("a")
 	selection := selector.MatchAll(document)
 	if selection == nil {
-		return true
+		return
 	}
 
 	links := make([]*Link, len(selection))
@@ -81,7 +69,7 @@ func FindLinks(document *html.Node, result *ParseResult) bool {
 		if attr != nil {
 			attrUrl, err := url.Parse(*attr)
 			if err == nil {
-				links[i-errorOffset] = &Link{NodeToText(node), *attrUrl}
+				links[i-errorOffset] = &Link{*attrUrl}
 			} else {
 				errorOffset++
 			}
@@ -96,7 +84,7 @@ func FindLinks(document *html.Node, result *ParseResult) bool {
 
 	result.Links = links
 
-	return true
+	return
 }
 
 func NodeAttr(node *html.Node, attrName string) *string {

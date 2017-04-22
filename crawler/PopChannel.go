@@ -15,7 +15,7 @@ func newPopChannel() popChannel {
 // with minimal blocking (since the channel is stacked, it is virtually equivalent
 // to an infinitely buffered channel).
 func (pc popChannel) stack(item *CrawlItem) {
-	toStack := NewCrawlQueue()
+	toStack := NewCrawlQueue("popChannel")
 	toStack.Push(item)
 
 	for {

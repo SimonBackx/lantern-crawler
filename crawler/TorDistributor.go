@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os/exec"
+	//"time"
 )
 
 type TorDistributor struct {
@@ -16,13 +17,14 @@ type TorDistributor struct {
 
 func NewTorDistributor() *TorDistributor {
 	StartSocksPort := 9150
-	AvailableDaemons := 1 //35
+	AvailableDaemons := 15 //35
 
 	daemonList := make([]*http.Client, AvailableDaemons)
 	for i := 0; i < AvailableDaemons; i++ {
 		addr := fmt.Sprintf("%v", StartSocksPort+i)
 		addr2 := fmt.Sprintf("%v", StartSocksPort+i+AvailableDaemons)
 		dir := fmt.Sprintf("/crawler/tor_dir/tor%v", i)
+
 		run("mkdir", "-p", dir)
 		err := run("tor", "--RunAsDaemon", "1", "--SocksPort", addr, "--ControlPort", addr2, "--CookieAuthentication", "0", "--HashedControlPassword", "", "--PidFile", fmt.Sprintf("/crawler/tor%v.pid", i), "--DataDirectory", dir) //
 
@@ -37,15 +39,21 @@ func NewTorDistributor() *TorDistributor {
 		}
 
 		transport := &http.Transport{
-			Dial:            torDialer.Dial,
+			Dial: torDialer.Dial,
+			/*TLSHandshakeTimeout:   10 * time.Second,
+			MaxIdleConnsPerHost:   0,
+			ResponseHeaderTimeout: 10 * time.Second,*/
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Onveilige https toelaten
 		}
-		daemonList[i] = &http.Client{Transport: transport}
+		daemonList[i] = &http.Client{
+			Transport: transport,
+			Timeout:   0,
+		}
 	}
 
 	Clients := NewClientList()
 	// Beschikbaarheid per proxy
-	for k := 0; k < 5000; k++ {
+	for k := 0; k < 300; k++ {
 		for i := 0; i < AvailableDaemons; i++ {
 			Clients.Push(daemonList[i])
 		}

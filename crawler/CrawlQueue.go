@@ -1,14 +1,41 @@
 package crawler
 
-import "fmt"
+import (
+	"bufio"
+	"fmt"
+)
 
 type CrawlQueue struct {
 	First *CrawlItem
 	Last  *CrawlItem
+	Name  string
 }
 
-func NewCrawlQueue() *CrawlQueue {
-	return &CrawlQueue{}
+func (q *CrawlQueue) ReadFromReader(reader *bufio.Reader) {
+	line, _, _ := reader.ReadLine()
+	for len(line) > 0 {
+		str := string(line)
+		item := NewCrawlItemFromString(&str)
+		if item != nil {
+			q.Push(item)
+		} else {
+			fmt.Println("Invalid item: " + str)
+		}
+		line, _, _ = reader.ReadLine()
+	}
+}
+
+func (q *CrawlQueue) SaveToWriter(writer *bufio.Writer) {
+	item := q.First
+	for item != nil {
+		writer.WriteString(item.SaveToString())
+		writer.WriteString("\n")
+		item = item.Next
+	}
+}
+
+func NewCrawlQueue(name string) *CrawlQueue {
+	return &CrawlQueue{Name: name}
 }
 
 func (queue *CrawlQueue) Clear() {
@@ -42,7 +69,7 @@ func (queue *CrawlQueue) Pop() *CrawlItem {
 
 func (queue *CrawlQueue) Push(item *CrawlItem) {
 	if item.Queue != nil {
-		fmt.Println("PANIC! pushed already queued item on queue")
+		fmt.Println("PANIC! pushing on queue " + queue.Name + ", already on queue " + item.Queue.Name)
 		return
 	}
 	item.Queue = queue
@@ -71,7 +98,7 @@ func (queue *CrawlQueue) Push(item *CrawlItem) {
 func (queue *CrawlQueue) Remove(item *CrawlItem) {
 	if item.Queue != queue {
 		// Uitschrijven voor de zekerheid, panic gaat soms fout bij goroutines
-		fmt.Println("Panic: Wil item verwijderen uit foute queue")
+		fmt.Println("Panic: Wil item verwijderen uit foute queue (" + queue.Name + "), maar is in " + item.Queue.Name)
 		panic("Wil item verwijderen uit foute queue")
 	}
 

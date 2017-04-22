@@ -1,9 +1,9 @@
 package crawler
 
 import (
-	"net"
+	//"net"
 	"net/http"
-	"time"
+	//"time"
 )
 
 type ClientDistributor interface {
@@ -18,17 +18,9 @@ type ClearnetDistributor struct {
 
 func NewClearnetDistributor() *ClearnetDistributor {
 	client := &http.Client{
-		Transport: &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout: 15 * time.Second,
-			}).Dial,
-			TLSHandshakeTimeout:   20 * time.Second,
-			MaxIdleConnsPerHost:   2000,
-			ResponseHeaderTimeout: 20 * time.Second,
-		},
-		Timeout: time.Second * 30,
+		Timeout: 0,
 	}
-	return &ClearnetDistributor{Client: client, Count: 2000}
+	return &ClearnetDistributor{Client: client, Count: 50}
 }
 
 func (dist *ClearnetDistributor) GetClient() *http.Client {
@@ -36,17 +28,17 @@ func (dist *ClearnetDistributor) GetClient() *http.Client {
 		return nil
 	}
 	dist.Count--
-	return &http.Client{
+	return dist.Client /*&http.Client{
 		Transport: &http.Transport{
 			Dial: (&net.Dialer{
 				Timeout: 200 * time.Second,
 			}).Dial,
 			TLSHandshakeTimeout:   200 * time.Second,
-			MaxIdleConnsPerHost:   0,
+			MaxIdleConnsPerHost:   5000,
 			ResponseHeaderTimeout: 200 * time.Second,
 		},
 		Timeout: time.Second * 200,
-	}
+	}*/
 }
 
 func (dist *ClearnetDistributor) FreeClient(client *http.Client) {
