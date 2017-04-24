@@ -2,8 +2,9 @@ package crawler
 
 import (
 	//"net"
+	"crypto/tls"
 	"net/http"
-	//"time"
+	"time"
 )
 
 type ClientDistributor interface {
@@ -17,10 +18,20 @@ type ClearnetDistributor struct {
 }
 
 func NewClearnetDistributor() *ClearnetDistributor {
-	client := &http.Client{
-		Timeout: 0,
+	tr := &http.Transport{
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true, // Hmmm?
+		//IdleConnTimeout: 15 * time.Second,
+
+		// Tijd dat we wachten op header (zo kort mogelijk houden)
+		ResponseHeaderTimeout: 10 * time.Second,
 	}
-	return &ClearnetDistributor{Client: client, Count: 50}
+
+	client := &http.Client{
+		Timeout:   40 * time.Second,
+		Transport: tr,
+	}
+	return &ClearnetDistributor{Client: client, Count: 200}
 }
 
 func (dist *ClearnetDistributor) GetClient() *http.Client {

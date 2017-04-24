@@ -1,7 +1,6 @@
 package crawler
 
 import (
-	"bytes"
 	"io"
 )
 
@@ -20,12 +19,14 @@ func readFirstBytes(r io.Reader) ([]byte, error) {
 	}
 
 	// Er valt nog verder te lezen
+
+	//
 	return b, nil
 }
 
 /// Leest alle resterende bytes van deze reader. Initialiseer hierbij al met reeds
 /// gelezen data uit readFirstBytes
-func readRemaining(r io.Reader, alreadyRead []byte) (reader io.Reader, err error) {
+/*func readRemaining(r io.Reader, alreadyRead []byte) (reader io.Reader, err error) {
 	buf := bytes.NewBuffer(alreadyRead)
 	// If the buffer overflows, we will get bytes.ErrTooLarge.
 	// Return that as an error. Any other panic remains.
@@ -43,4 +44,4 @@ func readRemaining(r io.Reader, alreadyRead []byte) (reader io.Reader, err error
 	_, err = buf.ReadFrom(r)
 
 	return bytes.NewReader(buf.Bytes()), err
-}
+}*/

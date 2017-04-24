@@ -2,7 +2,7 @@ package crawler
 
 import (
 	"bufio"
-	"context"
+	"bytes"
 	"github.com/PuerkitoBio/purell"
 	"io"
 	"math/rand"
@@ -53,6 +53,9 @@ type Hostworker struct {
 	Sleeping        bool // Of deze worker in de sleeping queue aanwezig is
 	InRecrawlList   bool
 	RecrawlOnFinish bool // Enkel aanpassen of opvragen buiten de goroutine v/d worker
+
+	FailStreak         int /// Aantal mislukte downloads na elkaar
+	SucceededDownloads int // Aantal successvolle downloads (ooit)
 
 	Client   *http.Client
 	stop     chan struct{}
@@ -145,7 +148,7 @@ func (w *Hostworker) GetRecrawlDuration() time.Duration {
 		w.crawler.Panic("GetRecrawlDuration on worker with empty IntroductionPoints!")
 		return time.Minute * 5
 	}
-	duration := time.Second*30 - time.Since(*w.IntroductionPoints.First.LastDownload)
+	duration := time.Minute*30 - time.Since(*w.IntroductionPoints.First.LastDownload)
 
 	return duration
 }
@@ -240,6 +243,9 @@ func (w *Hostworker) Run(client *http.Client) {
 				return
 			}
 
+			// Onderstaande kansverdeling moet nog minder uniform gemaakt worden
+			time.Sleep(time.Millisecond*time.Duration(rand.Intn(3000)) + 4000)
+
 			w.RequestStarted(item)
 			w.Request(item)
 
@@ -248,8 +254,6 @@ func (w *Hostworker) Run(client *http.Client) {
 				return
 			}
 
-			// Onderstaande kansverdeling moet nog minder uniform gemaakt worden
-			time.Sleep(time.Millisecond*time.Duration(rand.Intn(6000)) + 1000)
 		}
 	}
 }
@@ -257,39 +261,26 @@ func (w *Hostworker) Run(client *http.Client) {
 func (w *Hostworker) Request(item *CrawlItem) {
 	var reader io.Reader
 
-	// Cancel context voorzien
-	cx, cancel := context.WithCancel(context.Background())
-	ref := &cancel
-
 	if request, err := http.NewRequest("GET", item.URL.String(), reader); err == nil {
 		request.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1; rv:45.0) Gecko/20100101 Firefox/45.0")
 		request.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 		request.Header.Add("Accept_Language", "en-US,en;q=0.5")
-		//request.Header.Add("Connection", "keep-alive")
+		request.Header.Add("Connection", "keep-alive")
 
-		request.Close = true              // Connectie weggooien
-		request = request.WithContext(cx) //request.WithContext(w.crawler.context)
-
-		// Deze goroutine zorgt ervoor dat we deze request annuleren
-		// wanneer die te lang zou duren.
-		go func() {
-			time.Sleep(3 * time.Second)
-			c := ref
-			if c != nil {
-				w.crawler.speedLogger.Timeouts++
-				(*c)()
-			}
-		}()
+		request.Close = true // Connectie weggooien
+		request = request.WithContext(w.crawler.context)
 
 		if response, err := w.Client.Do(request); err == nil {
 			defer response.Body.Close()
-			ref = nil
+
+			startTime := time.Now()
 
 			// Maximaal 2MB (pagina's in darkweb zijn gemiddeld erg groot vanwege de afbeeldingen)
 			if response.ContentLength > 2000000 {
 				//w.crawler.cfg.LogInfo("Response: Content too long")
 				// Too big
 				// Eventueel op een ignore list zetten
+				item.Ignore = true
 				return
 			}
 
@@ -309,32 +300,62 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			if contentType != "text/html; charset=utf-8" {
 				//w.crawler.cfg.LogInfo("Not a HTML file")
 				// Op ignore list zetten
+				item.Ignore = true
 				return
 			}
 
-			// Rest inlezen
-			reader, err := readRemaining(response.Body, b)
-			if err != nil {
-				// Er ging iets mis
-				w.crawler.cfg.LogError(err)
-				w.RequestFailed(item)
-				return
+			firstReader := bytes.NewReader(b)
+
+			// De twee readers terug samenvoegen
+			reader := NewCountingReader(io.MultiReader(firstReader, response.Body), 2000000)
+			if w.ProcessResponse(item, response, reader) {
+				duration := time.Since(startTime)
+				w.crawler.speedLogger.Log(duration, reader.Size)
 			}
 
-			w.ProcessResponse(item, response, reader)
 		} else {
+
 			if response != nil && response.Body != nil {
 				response.Body.Close()
 			}
+
+			str := err.Error()
+			if strings.Contains(str, "SOCKS5") {
+				// Er is iets mis met de proxy,
+				// zal zich normaal uatomatisch herstellen, maar
+				// we stoppen even met deze crawler
+				w.sleepAfter = -1
+
+				// Even negeren
+				w.FailStreak--
+			} else if strings.Contains(str, "(Client.Timeout exceeded while awaiting headers)") {
+				w.crawler.speedLogger.Timeouts++
+			} else if strings.Contains(str, "timeout awaiting response headers") {
+				w.crawler.speedLogger.Timeouts++
+			} else if strings.Contains(str, "stopped after 10 redirects") {
+				item.Ignore = true
+			} else {
+				w.crawler.cfg.LogError(err)
+			}
+
 			w.RequestFailed(item)
+
+			// (Client.Timeout exceeded while awaiting headers)
+
+			// tor proxy niet bereikbaar:
+			// Get http://www.scoutswetteren.be: net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)
+
+			// timeout awaiting response headers
+			// request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)
 		}
 	} else {
 
 		w.RequestFailed(item)
 	}
+
 }
 
-func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, reader io.Reader) {
+func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, reader io.Reader) bool {
 	// Todo: status code controleren en dit correct afhandelen.
 
 	requestUrl := *response.Request.URL
@@ -344,8 +365,13 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 	result, err := Parse(reader, w.crawler.Queries)
 
 	if err != nil {
+		if err.Error() == "Reader reached maximum bytes!" {
+			w.crawler.cfg.LogError(err)
+			item.Ignore = true
+		}
+
 		w.RequestFailed(item)
-		return
+		return false
 	}
 
 	for _, query := range result.Queries {
@@ -440,6 +466,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 	}
 
 	w.RequestFinished(item)
+	return true
 }
 
 func (w *Hostworker) RequestStarted(item *CrawlItem) {
@@ -455,6 +482,8 @@ func (w *Hostworker) RequestStarted(item *CrawlItem) {
 
 func (w *Hostworker) RequestFinished(item *CrawlItem) {
 	//w.crawler.cfg.LogInfo(fmt.Sprintf("Request finished. %v", item.URL.String()))
+	w.FailStreak = 0
+	w.SucceededDownloads++
 
 	if item.Depth == 0 {
 		// Introduction point toevoegen
@@ -481,11 +510,22 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 	now := time.Now()
 	item.LastDownload = &now
 
-	w.crawler.speedLogger.Log()
 }
 
 func (w *Hostworker) RequestFailed(item *CrawlItem) {
 	item.FailCount++
+
+	if item.FailCount == 2 {
+		// 2e poging is ook mislukt
+		w.FailStreak++
+
+		if w.FailStreak > 10 {
+			// Meteen stoppen
+			w.sleepAfter = -1
+			w.crawler.cfg.LogInfo("Failstreak voor " + w.String())
+		}
+	}
+
 	if !item.IsUnavailable() {
 		// We wagen nog een poging binnen een uurtje
 		// Toevoegen aan failqueue
@@ -555,6 +595,12 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, depth *int, source *url.URL
 		item = NewCrawlItem(foundUrl)
 		w.AlreadyVisited[uri] = item
 		w.crawler.speedLogger.NewURLsCount++
+	} else {
+		if item.IsUnavailable() {
+			// Deze url is onbereikbaar, ofwel geen HTML bestand
+			// dat weten we omdat we deze al eerder hebben gecrawled
+			return
+		}
 	}
 
 	now := time.Now()

@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"github.com/SimonBackx/master-project/config"
 	"github.com/SimonBackx/master-project/crawler"
-	//"github.com/SimonBackx/master-project/parser"
 	"net/url"
-	//"regexp"
 )
 
 func run(quit chan bool, finished chan bool) {
@@ -16,11 +14,11 @@ func run(quit chan bool, finished chan bool) {
 
 	// Door tor sturen
 	conf := &config.CrawlerConfig{
-		UseTorProxy:   false,
+		UseTorProxy:   true,
 		OnlyOnion:     false,
 		LoadFromFiles: false,
 		SaveToFiles:   false,
-		MaxDomains:    1,
+		//MaxDomains:    1000,
 
 		LogRecrawlingEnabled: false,
 		LogGoroutinesEnabled: false,

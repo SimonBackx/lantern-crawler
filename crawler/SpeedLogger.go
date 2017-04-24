@@ -7,6 +7,8 @@ import (
 
 type SpeedLogger struct {
 	Count                int
+	DownloadSize         int64
+	DownloadTime         time.Duration
 	UnavailableCount     int
 	SuccessfulRetryCount int
 
@@ -61,7 +63,12 @@ func (logger *SpeedLogger) Run() {
 		//previousTime = &ti
 		domains := len(logger.Crawler.Workers)
 		sleeping := logger.Crawler.SleepingCrawlers.Length()
-		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v REQ/S, %v UNAVAILABLE/S, %v SUCCESSFUL RETRIES/S, %v DOMAINS, %v SLEEPING", requests, unavailable, sucretry, domains, sleeping))
+		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v REQ/s, %v unavailable/s, %v SUCCESSFUL RETRIES/S, %v domains, %v sleeping", requests, unavailable, sucretry, domains, sleeping))
+
+		if logger.Count > 0 && logger.DownloadTime.Seconds() > 0 {
+			logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v KB/s, average page size: %vKB, average download time: %vms", float64(logger.DownloadSize)/1000/logger.DownloadTime.Seconds(), float64(logger.DownloadSize)/1000/float64(logger.Count), logger.DownloadTime.Seconds()*1000/float64(logger.Count)))
+		}
+
 		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v NEW URL's, %v RECRAWLS, %v TIMEOUTS", logger.NewURLsCount, logger.RecrawlCount, logger.Timeouts))
 		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("Priority Queue		+%v	-%v excl. %v switches", logger.NewPriorityQueue, logger.PoppedFromPriorityQueue, logger.SwitchesToPriority))
 		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("Queue			+%v	-%v", logger.NewQueue, logger.PoppedFromQueue))
@@ -69,6 +76,9 @@ func (logger *SpeedLogger) Run() {
 		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("Failed Queue 		+%v	-%v", logger.NewFailedQueue, logger.PoppedFromFailedQueue))
 
 		logger.Count = 0
+		logger.DownloadSize = 0
+		logger.DownloadTime = 0
+
 		logger.Timeouts = 0
 		logger.UnavailableCount = 0
 		logger.SuccessfulRetryCount = 0
@@ -88,8 +98,10 @@ func (logger *SpeedLogger) Run() {
 	}
 }
 
-func (logger *SpeedLogger) Log() {
+func (logger *SpeedLogger) Log(duration time.Duration, bytes int64) {
 	logger.Count++
+	logger.DownloadSize += bytes
+	logger.DownloadTime += duration
 }
 
 func (logger *SpeedLogger) LogSuccessfulRetry() {

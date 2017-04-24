@@ -256,12 +256,15 @@ func (crawler *Crawler) Quit() {
 	crawler.speedLogger.Ticker.Stop()
 
 	close(crawler.Stop)
+
+	crawler.cfg.LogInfo("Stopping context...")
 	crawler.cancelContext()
 
 	// Wacht tot de context is beïndigd
 	<-crawler.context.Done()
 
 	// Wachten tot alle goroutines afgelopen zijn die requests verwerken
+	crawler.cfg.LogInfo("Stopping goroutines...")
 	crawler.waitGroup.Wait()
 
 	if crawler.cfg.SaveToFiles {

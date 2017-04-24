@@ -6,8 +6,9 @@ import (
 	"golang.org/x/net/proxy"
 	"io/ioutil"
 	"net/http"
+	//"os"
 	"os/exec"
-	//"time"
+	"time"
 )
 
 type TorDistributor struct {
@@ -16,17 +17,30 @@ type TorDistributor struct {
 }
 
 func NewTorDistributor() *TorDistributor {
+	/*e := run("cat", fmt.Sprintf("/proc/%v/limits", os.Getpid()))
+	if e != nil {
+		fmt.Println(e.Error())
+	}*/
+
 	StartSocksPort := 9150
-	AvailableDaemons := 15 //35
+	AvailableDaemons := 20 //35
 
 	daemonList := make([]*http.Client, AvailableDaemons)
 	for i := 0; i < AvailableDaemons; i++ {
 		addr := fmt.Sprintf("%v", StartSocksPort+i)
 		addr2 := fmt.Sprintf("%v", StartSocksPort+i+AvailableDaemons)
-		dir := fmt.Sprintf("/crawler/tor_dir/tor%v", i)
+		dir := fmt.Sprintf("/progress/tor_dir/tor%v", i)
 
 		run("mkdir", "-p", dir)
-		err := run("tor", "--RunAsDaemon", "1", "--SocksPort", addr, "--ControlPort", addr2, "--CookieAuthentication", "0", "--HashedControlPassword", "", "--PidFile", fmt.Sprintf("/crawler/tor%v.pid", i), "--DataDirectory", dir) //
+		err := run("tor",
+			"--RunAsDaemon", "1",
+			"--SocksPort", addr,
+			"--ControlPort", addr2,
+			//"--CookieAuthentication", "0",
+			//"--HashedControlPassword", "",
+			//"--PidFile", fmt.Sprintf("/progress/tor%v.pid", i),
+			"--DataDirectory", dir,
+		)
 
 		if err != nil {
 			fmt.Println("ERROR LAUNCHING tor: " + err.Error())
@@ -39,21 +53,24 @@ func NewTorDistributor() *TorDistributor {
 		}
 
 		transport := &http.Transport{
-			Dial: torDialer.Dial,
+			Dial:         torDialer.Dial,
+			MaxIdleConns: 600,
+			//DisableKeepAlives: true, // Hmmm?
 			/*TLSHandshakeTimeout:   10 * time.Second,
 			MaxIdleConnsPerHost:   0,
 			ResponseHeaderTimeout: 10 * time.Second,*/
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Onveilige https toelaten
+			ResponseHeaderTimeout: 15 * time.Second,
+			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, // Onveilige https toelaten
 		}
 		daemonList[i] = &http.Client{
 			Transport: transport,
-			Timeout:   0,
+			Timeout:   30 * time.Second,
 		}
 	}
 
 	Clients := NewClientList()
 	// Beschikbaarheid per proxy
-	for k := 0; k < 300; k++ {
+	for k := 0; k < 20; k++ {
 		for i := 0; i < AvailableDaemons; i++ {
 			Clients.Push(daemonList[i])
 		}
