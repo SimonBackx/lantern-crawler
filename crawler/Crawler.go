@@ -3,7 +3,7 @@ package crawler
 import (
 	"context"
 	"fmt"
-	"github.com/SimonBackx/master-project/config"
+	"github.com/SimonBackx/lantern-crawler/config"
 	"io/ioutil"
 	"net/url"
 	"os"

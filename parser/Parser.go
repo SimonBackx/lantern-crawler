@@ -2,7 +2,7 @@ package parser
 
 import (
 	"bytes"
-	"github.com/SimonBackx/master-project/crawler"
+	"github.com/SimonBackx/lantern-crawler/crawler"
 	"github.com/andybalholm/cascadia"
 	"golang.org/x/net/html"
 	"io"

@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/SimonBackx/master-project/config"
-	"github.com/SimonBackx/master-project/crawler"
+	"github.com/SimonBackx/lantern-crawler/config"
+	"github.com/SimonBackx/lantern-crawler/crawler"
 	"net/url"
 )
 
