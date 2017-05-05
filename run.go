@@ -12,25 +12,18 @@ func run(quit chan bool, finished chan bool) {
 		finished <- true
 	}()
 
-	// Door tor sturen
 	conf := &config.CrawlerConfig{
-		UseTorProxy:   true,
+		UseTorProxy:   false,
 		OnlyOnion:     false,
 		LoadFromFiles: false,
 		SaveToFiles:   false,
-		//MaxDomains:    1000,
+		MaxDomains:    1000,
 
 		LogRecrawlingEnabled: false,
 		LogGoroutinesEnabled: false,
 	}
 
-	// Niet door tor sturen
-	//conf := &config.CrawlerConfig{}
-
 	myCrawler := crawler.NewCrawler(conf)
-
-	query := crawler.NewQuery(crawler.NewQueryOperation(crawler.NewQueryRegexp("Simon"), crawler.AndOperator, crawler.NewQueryRegexp("Backx")))
-	myCrawler.AddQuery(query)
 
 	//urls := []string{"http://torlinkbgs6aabns.onion/", "http://zqktlwi4fecvo6ri.onion/wiki/index.php/Main_Page", "http://w363zoq3ylux5rf5.onion/"}
 	urls := []string{"http://www.scoutswetteren.be"}

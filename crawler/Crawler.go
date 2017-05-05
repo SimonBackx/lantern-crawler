@@ -17,6 +17,7 @@ type Crawler struct {
 	distributor   ClientDistributor
 	context       context.Context
 	cancelContext context.CancelFunc
+	ApiController *ApiController
 
 	// Map met alle URL -> DomainCrawlers (voor snel opzoeken)
 	Workers map[string]*Hostworker
@@ -44,7 +45,7 @@ type Crawler struct {
 
 	Started bool
 	Signal  chan int
-	Queries []*Query
+	Queries []Query
 }
 
 func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
@@ -72,9 +73,11 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 		speedLogger:        NewSpeedLogger(),
 		Stop:               make(chan struct{}, 1),
 		RecrawlTimer:       make(<-chan time.Time, 1),
-		Queries:            make([]*Query, 0),
+		Queries:            make([]Query, 0),
+		ApiController:      NewApiController(),
 	}
 	crawler.speedLogger.Crawler = crawler
+	crawler.RefreshQueries()
 
 	if !cfg.LoadFromFiles {
 		return crawler
@@ -110,6 +113,15 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 	return crawler
 }
 
+func (crawler *Crawler) RefreshQueries() {
+	queries, err := crawler.ApiController.GetQueries()
+	if err != nil {
+		crawler.cfg.LogError(err)
+		return
+	}
+	crawler.Queries = queries
+}
+
 func (crawler *Crawler) ProcessUrl(url *url.URL, source *url.URL) {
 	host := url.Hostname()
 	worker := crawler.Workers[host]
@@ -142,10 +154,6 @@ func (crawler *Crawler) ProcessUrl(url *url.URL, source *url.URL) {
 			crawler.SleepingCrawlers.Push(worker)
 		}
 	}
-}
-
-func (crawler *Crawler) AddQuery(q *Query) {
-	crawler.Queries = append(crawler.Queries, q)
 }
 
 func (crawler *Crawler) WakeSleepingWorkers() {

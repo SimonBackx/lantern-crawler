@@ -5,14 +5,16 @@ import (
 	"github.com/andybalholm/cascadia"
 	"golang.org/x/net/html"
 	"io"
+	"io/ioutil"
 	"net/url"
 	"regexp"
 	"strings"
 )
 
 type ParseResult struct {
-	Links   []*Link
-	Queries []*Query
+	Links    []*Link
+	Queries  []Query
+	Document *string
 }
 
 /*func byteArrayToString(b []byte) string {
@@ -20,9 +22,13 @@ type ParseResult struct {
 }*/
 
 // Momenteel nog geen return value, dat is voor later
-func Parse(reader io.Reader, queries []*Query) (*ParseResult, error) {
+func Parse(reader io.Reader, queries []Query) (*ParseResult, error) {
+	data, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
 
-	htmlDoc, err := html.Parse(reader)
+	htmlDoc, err := html.Parse(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -46,6 +52,8 @@ func Parse(reader io.Reader, queries []*Query) (*ParseResult, error) {
 			result.Queries = append(result.Queries, query)
 		}
 	}
+	s := string(data[:])
+	result.Document = &s
 
 	return result, nil
 }
@@ -103,9 +111,10 @@ func NodeToText(node *html.Node) string {
 	for next != nil && depth >= 0 {
 		if next.Type == html.TextNode {
 			buffer.WriteString(next.Data)
+			buffer.WriteString("\n")
 		}
 
-		if next.FirstChild != nil {
+		if next.FirstChild != nil && !(next.Type == html.ElementNode && (next.Data == "script" || next.Data == "style" || next.Data == "head")) {
 			next = next.FirstChild
 			depth++
 		} else {

@@ -259,9 +259,7 @@ func (w *Hostworker) Run(client *http.Client) {
 }
 
 func (w *Hostworker) Request(item *CrawlItem) {
-	var reader io.Reader
-
-	if request, err := http.NewRequest("GET", item.URL.String(), reader); err == nil {
+	if request, err := http.NewRequest("GET", item.URL.String(), nil); err == nil {
 		request.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1; rv:45.0) Gecko/20100101 Firefox/45.0")
 		request.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 		request.Header.Add("Accept_Language", "en-US,en;q=0.5")
@@ -334,6 +332,9 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				w.crawler.speedLogger.Timeouts++
 			} else if strings.Contains(str, "stopped after 10 redirects") {
 				item.Ignore = true
+			} else if strings.Contains(str, "context canceled") {
+				// Negeer failcount bij handmatige cancel
+				item.FailCount--
 			} else {
 				w.crawler.cfg.LogError(err)
 			}
@@ -375,7 +376,9 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 	}
 
 	for _, query := range result.Queries {
+		apiResult := NewResult(query, requestUrl.String(), result.Document)
 		w.crawler.cfg.LogInfo("Found " + query.String() + " at " + w.String() + item.String())
+		w.crawler.ApiController.SaveResult(apiResult)
 	}
 
 	workerResult := NewWorkerResult()
