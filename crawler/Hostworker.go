@@ -272,6 +272,26 @@ func (w *Hostworker) Request(item *CrawlItem) {
 		if response, err := w.Client.Do(request); err == nil {
 			defer response.Body.Close()
 
+			if response.StatusCode < 200 || response.StatusCode >= 300 {
+
+				// Special exceptions
+				switch response.StatusCode {
+				case 429:
+					w.sleepAfter = -1
+					w.crawler.cfg.Log("WARNING", "Too many requests for host "+w.String())
+					w.RequestFailed(item)
+					return
+				}
+
+				if response.StatusCode >= 400 && response.StatusCode < 500 {
+					item.Ignore = true
+				} else {
+					// Retry eventually
+					w.RequestFailed(item)
+				}
+				return
+			}
+
 			startTime := time.Now()
 
 			// Maximaal 2MB (pagina's in darkweb zijn gemiddeld erg groot vanwege de afbeeldingen)
