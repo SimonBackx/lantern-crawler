@@ -13,7 +13,7 @@ func run(quit chan bool, finished chan bool) {
 	}()
 
 	conf := &config.CrawlerConfig{
-		UseTorProxy:   true,
+		UseTorProxy:   false,
 		OnlyOnion:     false,
 		LoadFromFiles: false,
 		SaveToFiles:   false,

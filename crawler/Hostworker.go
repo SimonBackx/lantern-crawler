@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"github.com/PuerkitoBio/purell"
+	"github.com/SimonBackx/lantern-crawler/queries"
 	"io"
 	"math/rand"
 	"net/http"
@@ -376,7 +377,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 	}
 
 	for _, query := range result.Queries {
-		apiResult := NewResult(query, requestUrl.String(), result.Document)
+		apiResult := queries.NewResult(query, requestUrl.String(), result.Document)
 		w.crawler.cfg.LogInfo("Found " + query.String() + " at " + w.String() + item.String())
 		w.crawler.ApiController.SaveResult(apiResult)
 	}

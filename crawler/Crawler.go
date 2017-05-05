@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/SimonBackx/lantern-crawler/config"
+	"github.com/SimonBackx/lantern-crawler/queries"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -45,7 +46,7 @@ type Crawler struct {
 
 	Started bool
 	Signal  chan int
-	Queries []Query
+	Queries []queries.Query
 }
 
 func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
@@ -73,7 +74,7 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 		speedLogger:        NewSpeedLogger(),
 		Stop:               make(chan struct{}, 1),
 		RecrawlTimer:       make(<-chan time.Time, 1),
-		Queries:            make([]Query, 0),
+		Queries:            make([]queries.Query, 0),
 		ApiController:      NewApiController(),
 	}
 	crawler.speedLogger.Crawler = crawler

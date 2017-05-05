@@ -24,14 +24,14 @@ func NewClearnetDistributor() *ClearnetDistributor {
 		//IdleConnTimeout: 15 * time.Second,
 
 		// Tijd dat we wachten op header (zo kort mogelijk houden)
-		ResponseHeaderTimeout: 10 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
 	}
 
 	client := &http.Client{
-		Timeout:   40 * time.Second,
+		Timeout:   30 * time.Second,
 		Transport: tr,
 	}
-	return &ClearnetDistributor{Client: client, Count: 600}
+	return &ClearnetDistributor{Client: client, Count: 800}
 }
 
 func (dist *ClearnetDistributor) GetClient() *http.Client {

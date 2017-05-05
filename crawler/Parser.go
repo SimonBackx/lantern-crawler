@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"bytes"
+	"github.com/SimonBackx/lantern-crawler/queries"
 	"github.com/andybalholm/cascadia"
 	"golang.org/x/net/html"
 	"io"
@@ -13,7 +14,7 @@ import (
 
 type ParseResult struct {
 	Links    []*Link
-	Queries  []Query
+	Queries  []queries.Query
 	Document *string
 }
 
@@ -22,7 +23,7 @@ type ParseResult struct {
 }*/
 
 // Momenteel nog geen return value, dat is voor later
-func Parse(reader io.Reader, queries []Query) (*ParseResult, error) {
+func Parse(reader io.Reader, queries []queries.Query) (*ParseResult, error) {
 	data, err := ioutil.ReadAll(reader)
 	if err != nil {
 		return nil, err
@@ -47,7 +48,7 @@ func Parse(reader io.Reader, queries []Query) (*ParseResult, error) {
 
 	// Queries op uitvoeren
 	for _, query := range queries {
-		matched := query.Query.query(&str)
+		matched := query.Query.Execute(&str)
 		if matched {
 			result.Queries = append(result.Queries, query)
 		}

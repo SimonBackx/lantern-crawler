@@ -54,7 +54,7 @@ func NewTorDistributor() *TorDistributor {
 
 		transport := &http.Transport{
 			Dial:         torDialer.Dial,
-			MaxIdleConns: 600,
+			MaxIdleConns: 800,
 			//DisableKeepAlives: true, // Hmmm?
 			/*TLSHandshakeTimeout:   10 * time.Second,
 			MaxIdleConnsPerHost:   0,

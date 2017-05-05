@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/SimonBackx/lantern-crawler/queries"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -28,7 +29,7 @@ func NewApiController() *ApiController {
 	return &ApiController{url: "http://localhost:8080/api", client: client}
 }
 
-func (a *ApiController) SaveResult(result *Result) error {
+func (a *ApiController) SaveResult(result *queries.Result) error {
 	jsonString, err := json.Marshal(result)
 	if err != nil {
 		return err
@@ -37,13 +38,13 @@ func (a *ApiController) SaveResult(result *Result) error {
 	return err
 }
 
-func (a *ApiController) GetQueries() ([]Query, error) {
+func (a *ApiController) GetQueries() ([]queries.Query, error) {
 	body, err := a.newRequest("GET", "/queries", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var queries []Query
+	var queries []queries.Query
 	err = json.Unmarshal(body, &queries)
 	if err != nil {
 		return nil, err
