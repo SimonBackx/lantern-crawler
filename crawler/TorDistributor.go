@@ -70,7 +70,7 @@ func NewTorDistributor() *TorDistributor {
 
 	Clients := NewClientList()
 	// Beschikbaarheid per proxy
-	for k := 0; k < 20; k++ {
+	for k := 0; k < 40; k++ {
 		for i := 0; i < AvailableDaemons; i++ {
 			Clients.Push(daemonList[i])
 		}

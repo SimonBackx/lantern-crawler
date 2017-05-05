@@ -31,7 +31,7 @@ func NewClearnetDistributor() *ClearnetDistributor {
 		Timeout:   40 * time.Second,
 		Transport: tr,
 	}
-	return &ClearnetDistributor{Client: client, Count: 200}
+	return &ClearnetDistributor{Client: client, Count: 600}
 }
 
 func (dist *ClearnetDistributor) GetClient() *http.Client {

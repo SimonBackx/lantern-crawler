@@ -244,7 +244,7 @@ func (w *Hostworker) Run(client *http.Client) {
 			}
 
 			// Onderstaande kansverdeling moet nog minder uniform gemaakt worden
-			time.Sleep(time.Millisecond*time.Duration(rand.Intn(3000)) + 4000)
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(3000)+4000))
 
 			w.RequestStarted(item)
 			w.Request(item)
