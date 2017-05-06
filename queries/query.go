@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"gopkg.in/mgo.v2/bson"
+	"regexp"
 	"strings"
 	"time"
 )
+
+var cleanStringRegexp = regexp.MustCompile("(^|\\s)\\s+")
 
 type Query struct {
 	Id        bson.ObjectId `json:"_id,omitempty" bson:"_id,omitempty"`
@@ -18,6 +21,7 @@ type Query struct {
 
 func NewQuery(name string, q QueryAction) *Query {
 	now := time.Now()
+
 	return &Query{Name: name, CreatedOn: now, Query: q}
 }
 
@@ -115,8 +119,12 @@ func (q *Query) Execute(b []byte) *string {
 		buffer.WriteString("... ")
 	}
 	str := buffer.String()
-	str = strings.Replace(str, "\n", "", -1)
-	return &str
+	return CleanString(&str)
+}
+
+func CleanString(str *string) *string {
+	str2 := cleanStringRegexp.ReplaceAllString(strings.Replace(*str, "\n", "", -1), "$1")
+	return &str2
 }
 
 /*func (q *Query) MarshalJSON() ([]byte, error) {

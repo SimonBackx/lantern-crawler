@@ -105,7 +105,7 @@ func FindTitle(document *html.Node) *string {
 
 	title := string(NodeToText(selection)[:])
 
-	return &title
+	return queries.CleanString(&title)
 }
 
 func NodeAttr(node *html.Node, attrName string) *string {
