@@ -127,7 +127,7 @@ func NodeToText(node *html.Node) []byte {
 			buffer.WriteString("\n")
 		}
 
-		if next.FirstChild != nil && !(next.Type == html.ElementNode && (next.Data == "script" || next.Data == "style" || next.Data == "head")) {
+		if next.FirstChild != nil && !(next.Type == html.ElementNode && (next.Data == "script" || next.Data == "style" || next.Data == "head" || next.Data == "noscript")) {
 			next = next.FirstChild
 			depth++
 		} else {
