@@ -9,9 +9,9 @@ type TextQuery struct {
 	Text string
 }
 
-func (q *TextQuery) Execute(str *string) bool {
+func (q *TextQuery) Execute(b []byte) [][]int {
 	// todo: not implemented
-	return false
+	return nil
 }
 
 func (q *TextQuery) String() string {

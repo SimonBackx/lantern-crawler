@@ -10,6 +10,7 @@ import (
 )
 
 const crawlItemTimeFormat = "2006-01-02-15:04:05.999999999"
+const maxFailCount = 6
 
 type CrawlItem struct {
 	URL           *url.URL
@@ -91,7 +92,7 @@ func (i *CrawlItem) String() string {
 }
 
 func (i *CrawlItem) IsUnavailable() bool {
-	return i.FailCount > 10 || i.Ignore
+	return i.FailCount > maxFailCount || i.Ignore
 }
 
 func (i *CrawlItem) NeedsRetry() bool {
@@ -104,12 +105,14 @@ func (i *CrawlItem) NeedsRetry() bool {
 		return true
 	}
 
-	// a^1 + a^2 + a^3 + a^4 + a^5 + a^6 + a^7 + a^8 + a^9 + a^10 = 44640 minuten (= 1 maand)
-	// => a = 2.79
+	// n = maxFailCount - 1
+	// a^1 + a^2 + a^3 + a^4 + a^5 + a^6 + a^7 + a^8 + a^9 + a^n = 44640 minuten (= 1 maand)
+	// => a = 2.79 voor (n = 10)
+	// => a = 8.3 (n = 5)
 	// Het duurt 1 maand voor een request verwijderd wordt als we deze formule gebruiken
 	// Deze exponentiele retry tijd is enkel mogelijk dankzij de leveledQueue
 	// Op die manier kunnen we het sorteren van items vermijden
-	answer := time.Since(*i.LastDownloadStarted) > time.Duration(math.Pow(2.79, float64(i.FailCount-1)))*time.Minute //time.Hour
+	answer := time.Since(*i.LastDownloadStarted) > time.Duration(math.Pow(8.3, float64(i.FailCount-1)))*time.Minute //time.Hour
 
 	return answer
 }

@@ -42,8 +42,12 @@ func NewRegexpQuery(str string) *RegexpQuery {
 	return &RegexpQuery{Regexp: reg}
 }
 
-func (a *RegexpQuery) Execute(str *string) bool {
-	return a.Regexp.MatchString(*str)
+func (a *RegexpQuery) Execute(b []byte) [][]int {
+	result := a.Regexp.FindIndex(b)
+	if result == nil {
+		return nil
+	}
+	return [][]int{result}
 }
 
 func (q *RegexpQuery) String() string {

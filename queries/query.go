@@ -1,9 +1,11 @@
 package queries
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"gopkg.in/mgo.v2/bson"
+	"strings"
 	"time"
 )
 
@@ -19,8 +21,102 @@ func NewQuery(name string, q QueryAction) *Query {
 	return &Query{Name: name, CreatedOn: now, Query: q}
 }
 
-func (q *Query) Execute(str *string) bool {
-	return q.Query.Execute(str)
+func (q *Query) Execute(b []byte) *string {
+	result := q.Query.Execute(b)
+	if result == nil || len(result) == 0 {
+		return nil
+	}
+
+	var maxLength int = 120
+	characters := maxLength / len(result)
+
+	enddot := true
+	var buffer bytes.Buffer
+	for i, resultIndexes := range result {
+		if i > 0 {
+			buffer.WriteString("... ")
+		}
+		enddot = true
+
+		start := resultIndexes[0]
+		end := resultIndexes[1]
+		length := end - start
+		margin := (characters - length) / 2
+
+		if margin > 0 {
+			foundStart := start
+			prev := false
+			predot := (i == 0)
+			for i := start; i >= start-margin; i-- {
+				if i <= 0 {
+					foundStart = 0
+					predot = false
+					break
+				}
+
+				if b[i] == " "[0] {
+					if !prev {
+						foundStart = i + 1
+						prev = true
+					}
+				} else if b[i] == "\n"[0] {
+					foundStart = i + 1
+					predot = false
+					break
+				} else {
+					prev = false
+				}
+			}
+
+			start = foundStart
+
+			foundEnd := end
+			prev = false
+			for i := end; i <= end+margin; i++ {
+				if i >= len(b) {
+					foundEnd = len(b)
+					enddot = false
+					break
+				}
+
+				if b[i] == " "[0] {
+					if !prev {
+						foundEnd = i
+						prev = true
+						enddot = true
+					}
+				} else if b[i] == "\n"[0] {
+					foundEnd = i
+					enddot = false
+					break
+				} else {
+					prev = false
+				}
+			}
+
+			end = foundEnd
+
+			if predot {
+				buffer.WriteString("...")
+			}
+
+		} else {
+			end = start + characters
+			if end > len(b) {
+				end = len(b)
+			}
+		}
+
+		buffer.Write(b[start:end])
+
+	}
+
+	if enddot {
+		buffer.WriteString("... ")
+	}
+	str := buffer.String()
+	str = strings.Replace(str, "\n", "", -1)
+	return &str
 }
 
 /*func (q *Query) MarshalJSON() ([]byte, error) {

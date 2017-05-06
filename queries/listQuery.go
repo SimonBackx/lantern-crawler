@@ -9,9 +9,9 @@ type ListQuery struct {
 	List []string
 }
 
-func (q *ListQuery) Execute(str *string) bool {
+func (q *ListQuery) Execute(b []byte) [][]int {
 	// todo: not implemented
-	return false
+	return nil
 }
 
 func (q *ListQuery) String() string {

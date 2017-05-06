@@ -13,9 +13,8 @@ import (
 )
 
 type ParseResult struct {
-	Links    []*Link
-	Queries  []queries.Query
-	Document *string
+	Links   []*Link
+	Results []*queries.Result
 }
 
 /*func byteArrayToString(b []byte) string {
@@ -23,7 +22,7 @@ type ParseResult struct {
 }*/
 
 // Momenteel nog geen return value, dat is voor later
-func Parse(reader io.Reader, queries []queries.Query) (*ParseResult, error) {
+func Parse(reader io.Reader, queryList []queries.Query) (*ParseResult, error) {
 	data, err := ioutil.ReadAll(reader)
 	if err != nil {
 		return nil, err
@@ -43,18 +42,19 @@ func Parse(reader io.Reader, queries []queries.Query) (*ParseResult, error) {
 	result := &ParseResult{}
 
 	FindLinks(htmlDoc, result)
+	title := FindTitle(htmlDoc)
 
-	str := NodeToText(htmlDoc)
+	byteString := NodeToText(htmlDoc)
+	document := string(data[:])
 
 	// Queries op uitvoeren
-	for _, query := range queries {
-		matched := query.Query.Execute(&str)
-		if matched {
-			result.Queries = append(result.Queries, query)
+	for _, query := range queryList {
+		snippet := query.Execute(byteString)
+		if snippet != nil {
+			apiResult := queries.NewResult(query, nil, nil, &document, title, snippet)
+			result.Results = append(result.Results, apiResult)
 		}
 	}
-	s := string(data[:])
-	result.Document = &s
 
 	return result, nil
 }
@@ -96,6 +96,18 @@ func FindLinks(document *html.Node, result *ParseResult) {
 	return
 }
 
+func FindTitle(document *html.Node) *string {
+	selector := cascadia.MustCompile("head title")
+	selection := selector.MatchFirst(document)
+	if selection == nil {
+		return nil
+	}
+
+	title := string(NodeToText(selection)[:])
+
+	return &title
+}
+
 func NodeAttr(node *html.Node, attrName string) *string {
 	for _, attr := range node.Attr {
 		if attr.Key == attrName {
@@ -105,7 +117,7 @@ func NodeAttr(node *html.Node, attrName string) *string {
 	return nil
 }
 
-func NodeToText(node *html.Node) string {
+func NodeToText(node *html.Node) []byte {
 	var buffer bytes.Buffer
 	next := node.FirstChild
 	depth := 0
@@ -127,7 +139,7 @@ func NodeToText(node *html.Node) string {
 			}
 		}
 	}
-	return buffer.String()
+	return buffer.Bytes()
 }
 
 func cleanString(str string) string {

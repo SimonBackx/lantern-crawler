@@ -8,7 +8,7 @@ import (
 /// Kan een zoekoperatie uitvoeren op een stuk data.
 /// Geeft true / false aan afhankelijk van de match
 type QueryAction interface {
-	Execute(str *string) bool
+	Execute(b []byte) [][]int
 	String() string
 }
 

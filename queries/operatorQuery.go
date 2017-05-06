@@ -39,18 +39,27 @@ func (o *OperatorQuery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-func (o *OperatorQuery) Execute(str *string) bool {
-	first := o.First.Execute(str)
-	if first {
+func (o *OperatorQuery) Execute(b []byte) [][]int {
+	first := o.First.Execute(b)
+	if first != nil {
 		if o.Operator == OrOperator {
-			return true
+			return first
 		}
 	} else {
 		if o.Operator == AndOperator {
-			return false
+			return nil
 		}
 	}
-	return o.Last.Execute(str)
+
+	last := o.Last.Execute(b)
+	if last == nil {
+		return nil
+	}
+
+	if first == nil {
+		return last
+	}
+	return append(first, last...)
 }
 
 func (o *OperatorQuery) UnmarshalJSON(b []byte) error {

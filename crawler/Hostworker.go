@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"github.com/PuerkitoBio/purell"
-	"github.com/SimonBackx/lantern-crawler/queries"
 	"io"
 	"math/rand"
 	"net/http"
@@ -284,7 +283,12 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				}
 
 				if response.StatusCode >= 400 && response.StatusCode < 500 {
-					item.Ignore = true
+					// Lange tijd wachten voor het nog 2x opnieuw te proberen
+					if item.FailCount < maxFailCount-2 {
+						item.FailCount = maxFailCount - 2
+					}
+
+					w.RequestFailed(item)
 				} else {
 					// Retry eventually
 					w.RequestFailed(item)
@@ -396,9 +400,17 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 		return false
 	}
 
-	for _, query := range result.Queries {
-		apiResult := queries.NewResult(query, requestUrl.String(), result.Document)
-		w.crawler.cfg.LogInfo("Found " + query.String() + " at " + w.String() + item.String())
+	host := w.String()
+	urlString := requestUrl.RequestURI()
+
+	for _, apiResult := range result.Results {
+		apiResult.Host = &host
+		apiResult.Url = &urlString
+		if apiResult.Title == nil {
+			apiResult.Title = &host
+		}
+
+		w.crawler.cfg.LogInfo("Found " + *apiResult.Snippet + " at " + w.String() + item.String())
 		w.crawler.ApiController.SaveResult(apiResult)
 	}
 
@@ -562,14 +574,17 @@ func (w *Hostworker) RequestFailed(item *CrawlItem) {
 
 func (w *Hostworker) GetNextRequest() *CrawlItem {
 	f := w.FailedQueue.Pop()
+
 	if f != nil {
 		w.crawler.speedLogger.PoppedFromFailedQueue++
 		return f
 	}
+
 	if !w.PriorityQueue.IsEmpty() {
 		w.crawler.speedLogger.PoppedFromPriorityQueue++
 		return w.PriorityQueue.Pop()
 	}
+
 	if !w.Queue.IsEmpty() {
 		w.crawler.speedLogger.PoppedFromQueue++
 		return w.Queue.Pop()

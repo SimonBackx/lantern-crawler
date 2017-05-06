@@ -12,10 +12,13 @@ type Result struct {
 	LastFound   time.Time `json:"lastFound" bson:"lastFound"`
 	CreatedOn   time.Time `json:"createdOn" bson:"createdOn"`
 	Occurrences int       `json:"occurrences" bson:"occurrences"`
-	Url         string    `json:"url" bson:"url"`
+	Url         *string   `json:"url" bson:"url"`
 	Body        *string   `json:"body" bson:"body"`
+	Title       *string   `json:"title" bson:"title"`
+	Host        *string   `json:"host" bson:"host"`
+	Snippet     *string   `json:"snippet" bson:"snippet"`
 }
 
-func NewResult(query Query, url string, body *string) *Result {
-	return &Result{QueryId: query.Id, LastFound: time.Now(), CreatedOn: time.Now(), Occurrences: 1, Url: url, Body: body}
+func NewResult(query Query, url, host, body, title, snippet *string) *Result {
+	return &Result{QueryId: query.Id, LastFound: time.Now(), CreatedOn: time.Now(), Occurrences: 1, Url: url, Body: body, Host: host, Title: title, Snippet: snippet}
 }
