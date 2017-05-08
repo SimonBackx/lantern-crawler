@@ -5,17 +5,18 @@ import (
 )
 
 type LeveledQueue struct {
-	Levels map[int]*CrawlQueue
+	Levels []*CrawlQueue
 }
 
 func NewLeveledQueue() *LeveledQueue {
-	return &LeveledQueue{Levels: make(map[int]*CrawlQueue)}
+	lvls := make([]*CrawlQueue, maxFailCount+1)
+	for i := 0; i <= maxFailCount; i++ {
+		lvls[i] = NewCrawlQueue("Leveled queue")
+	}
+	return &LeveledQueue{Levels: lvls}
 }
 
 func (r *LeveledQueue) Push(item *CrawlItem, level int) {
-	if _, present := r.Levels[level]; present == false {
-		r.Levels[level] = NewCrawlQueue("Leveled queue")
-	}
 	r.Levels[level].Push(item)
 }
 

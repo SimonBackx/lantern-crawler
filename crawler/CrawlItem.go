@@ -95,6 +95,12 @@ func (i *CrawlItem) IsUnavailable() bool {
 	return i.FailCount > maxFailCount || i.Ignore
 }
 
+func (i *CrawlItem) FakeRetry() {
+	n := time.Now()
+	i.LastDownloadStarted = &n
+	i.FailCount = 1
+}
+
 func (i *CrawlItem) NeedsRetry() bool {
 	if i.LastDownloadStarted == nil {
 		return false
