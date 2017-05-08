@@ -82,7 +82,10 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 		ApiController:      NewApiController(),
 	}
 	crawler.speedLogger.Crawler = crawler
-	crawler.RefreshQueries()
+
+	if !cfg.Testing {
+		crawler.RefreshQueries()
+	}
 
 	// Nieuwe queries etc laden
 	crawler.UpdateTimer = time.After(time.Minute * 5)

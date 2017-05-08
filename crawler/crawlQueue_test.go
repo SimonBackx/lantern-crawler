@@ -116,4 +116,21 @@ func TestCrawlQueue(test *testing.T) {
 		test.Log("Item previous, next or queue not set correctly (8)")
 		test.Fail()
 	}
+
+	popped = queue.Pop()
+	if popped != item2 {
+		test.Log("Wrong popped")
+		test.Fail()
+	}
+
+	popped = queue.Pop()
+	if popped != item3 {
+		test.Log("Wrong popped")
+		test.Fail()
+	}
+
+	if !queue.IsEmpty() || queue.First != nil || queue.Last != nil {
+		test.Log("Queue not reset on last pop")
+		test.Fail()
+	}
 }

@@ -11,6 +11,7 @@ type CrawlerConfig struct {
 	LoadFromFiles bool
 	SaveToFiles   bool
 	MaxDomains    int /// 0 = infinite
+	Testing       bool
 
 	LogRecrawlingEnabled bool
 	LogGoroutinesEnabled bool
