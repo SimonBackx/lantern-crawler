@@ -36,7 +36,7 @@ type CrawlItem struct {
 }
 
 func NewCrawlItem(URL *url.URL) *CrawlItem {
-	return &CrawlItem{URL: URL, Ignore: false}
+	return &CrawlItem{URL: URL}
 }
 
 func NewCrawlItemFromString(str *string) *CrawlItem {

@@ -39,6 +39,17 @@ func NewCrawlQueue(name string) *CrawlQueue {
 }
 
 func (queue *CrawlQueue) Clear() {
+	item := queue.First
+	for item != nil {
+		item.Previous = nil
+
+		backup := item.Next
+		item.Next = nil
+		item.Queue = nil
+
+		item = backup
+	}
+
 	queue.First = nil
 	queue.Last = nil
 }
