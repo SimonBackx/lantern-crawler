@@ -3,7 +3,7 @@ package crawler
 import (
 	"context"
 	"fmt"
-	"github.com/SimonBackx/lantern-crawler/config"
+	"github.com/SimonBackx/lantern-crawler/distributors"
 	"github.com/SimonBackx/lantern-crawler/queries"
 	"io/ioutil"
 	"net/url"
@@ -14,8 +14,8 @@ import (
 )
 
 type Crawler struct {
-	cfg           *config.CrawlerConfig
-	distributor   ClientDistributor
+	cfg           *CrawlerConfig
+	distributor   distributors.Distributor
 	context       context.Context
 	cancelContext context.CancelFunc
 	ApiController *ApiController
@@ -35,6 +35,9 @@ type Crawler struct {
 	// om één of meerdere items van de RecrawlList te halen
 	RecrawlTimer <-chan time.Time
 
+	// General update timer
+	UpdateTimer <-chan time.Time
+
 	WorkerEnded        chan *Hostworker
 	WorkerResult       chan *WorkerResult
 	WorkerIntroduction chan *Hostworker
@@ -49,14 +52,14 @@ type Crawler struct {
 	Queries []queries.Query
 }
 
-func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
+func NewCrawler(cfg *CrawlerConfig) *Crawler {
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	var distributor ClientDistributor
+	var distributor distributors.Distributor
 	if cfg.UseTorProxy {
-		distributor = NewTorDistributor()
+		distributor = distributors.NewTor()
 	} else {
-		distributor = NewClearnetDistributor()
+		distributor = distributors.NewClearnet()
 	}
 
 	var wg sync.WaitGroup
@@ -74,11 +77,15 @@ func NewCrawler(cfg *config.CrawlerConfig) *Crawler {
 		speedLogger:        NewSpeedLogger(),
 		Stop:               make(chan struct{}, 1),
 		RecrawlTimer:       make(<-chan time.Time, 1),
+		UpdateTimer:        make(<-chan time.Time, 1),
 		Queries:            make([]queries.Query, 0),
 		ApiController:      NewApiController(),
 	}
 	crawler.speedLogger.Crawler = crawler
 	crawler.RefreshQueries()
+
+	// Nieuwe queries etc laden
+	crawler.UpdateTimer = time.After(time.Minute * 5)
 
 	if !cfg.LoadFromFiles {
 		return crawler
@@ -334,6 +341,8 @@ func (crawler *Crawler) Start(signal chan int) {
 			if worker.WantsToGetUp() {
 				worker.Sleeping = true
 				crawler.SleepingCrawlers.Push(worker)
+			} else {
+				// todo: toevoegen aan completeFails?
 			}
 
 			// Een worker heeft zich afgesloten
@@ -359,6 +368,10 @@ func (crawler *Crawler) Start(signal chan int) {
 			if !worker.InRecrawlList {
 				crawler.AddRecrawlList(worker)
 			}
+
+		case <-crawler.UpdateTimer:
+			crawler.RefreshQueries()
+			crawler.UpdateTimer = time.After(time.Minute * 5)
 
 		case <-crawler.RecrawlTimer:
 			crawler.CheckRecrawlList()

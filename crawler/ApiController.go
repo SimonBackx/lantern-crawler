@@ -55,8 +55,8 @@ func (a *ApiController) GetQueries() ([]queries.Query, error) {
 func (a *ApiController) newRequest(method, url string, reader io.Reader) ([]byte, error) {
 	fmt.Printf("%s %s\n", method, url)
 
-	key := "secret"
-	user := "secret"
+	key := "wQMXWVm4Yab_SKRISvmbWtbWmuMwud7oVRA0JUYThNAYDN8XS8KG4I0uOAOhRUB43rGtbn4VOhyVds-OIseAHwDOUpex0aESRHXz03jbOdSvLRQN-_qTFYqvcU3paXFAEXMz48a7VlB"
+	user := "crawler"
 
 	if request, err := http.NewRequest(method, a.url+url, reader); err == nil {
 		request.Header.Add("X-API-USER", user)

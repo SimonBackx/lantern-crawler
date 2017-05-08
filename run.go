@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/SimonBackx/lantern-crawler/config"
 	"github.com/SimonBackx/lantern-crawler/crawler"
 	"net/url"
 )
@@ -12,7 +11,7 @@ func run(quit chan bool, finished chan bool) {
 		finished <- true
 	}()
 
-	conf := &config.CrawlerConfig{
+	conf := &crawler.CrawlerConfig{
 		UseTorProxy:   false,
 		OnlyOnion:     false,
 		LoadFromFiles: false,

@@ -1,4 +1,4 @@
-package crawler
+package distributors
 
 import (
 	"crypto/tls"
@@ -6,24 +6,18 @@ import (
 	"golang.org/x/net/proxy"
 	"io/ioutil"
 	"net/http"
-	//"os"
 	"os/exec"
 	"time"
 )
 
-type TorDistributor struct {
+type Tor struct {
 	Clients          *ClientList
 	AvailableDaemons int
 }
 
-func NewTorDistributor() *TorDistributor {
-	/*e := run("cat", fmt.Sprintf("/proc/%v/limits", os.Getpid()))
-	if e != nil {
-		fmt.Println(e.Error())
-	}*/
-
+func NewTor() *Tor {
 	StartSocksPort := 9150
-	AvailableDaemons := 20 //35
+	AvailableDaemons := 20
 
 	daemonList := make([]*http.Client, AvailableDaemons)
 	for i := 0; i < AvailableDaemons; i++ {
@@ -57,8 +51,8 @@ func NewTorDistributor() *TorDistributor {
 			MaxIdleConns: 800,
 			//DisableKeepAlives: true, // Hmmm?
 			/*TLSHandshakeTimeout:   10 * time.Second,
-			MaxIdleConnsPerHost:   0,
-			ResponseHeaderTimeout: 10 * time.Second,*/
+			  MaxIdleConnsPerHost:   0,
+			  ResponseHeaderTimeout: 10 * time.Second,*/
 			ResponseHeaderTimeout: 15 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, // Onveilige https toelaten
 		}
@@ -75,14 +69,14 @@ func NewTorDistributor() *TorDistributor {
 			Clients.Push(daemonList[i])
 		}
 	}
-	return &TorDistributor{AvailableDaemons: AvailableDaemons, Clients: Clients}
+	return &Tor{AvailableDaemons: AvailableDaemons, Clients: Clients}
 }
 
-func (dist *TorDistributor) GetClient() *http.Client {
+func (dist *Tor) GetClient() *http.Client {
 	return dist.Clients.Pop()
 }
 
-func (dist *TorDistributor) FreeClient(client *http.Client) {
+func (dist *Tor) FreeClient(client *http.Client) {
 	dist.Clients.Push(client)
 }
 
@@ -127,19 +121,3 @@ func run(command string, arguments ...string) error {
 
 	return nil
 }
-
-/*if cfg.TorProxyAddress != nil {
-	torDialer, err := proxy.SOCKS5("tcp", *cfg.TorProxyAddress, nil, proxy.Direct)
-
-	if err != nil {
-		cfg.LogError(err)
-		return nil
-	}
-	transport = &http.Transport{
-		Dial: torDialer.Dial,
-	}
-} else {
-	transport = &http.Transport{}
-}
-
-client := &http.Client{Transport: transport, Timeout: time.Second * 10}*/

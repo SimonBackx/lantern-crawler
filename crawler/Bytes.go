@@ -19,29 +19,5 @@ func readFirstBytes(r io.Reader) ([]byte, error) {
 	}
 
 	// Er valt nog verder te lezen
-
-	//
 	return b, nil
 }
-
-/// Leest alle resterende bytes van deze reader. Initialiseer hierbij al met reeds
-/// gelezen data uit readFirstBytes
-/*func readRemaining(r io.Reader, alreadyRead []byte) (reader io.Reader, err error) {
-	buf := bytes.NewBuffer(alreadyRead)
-	// If the buffer overflows, we will get bytes.ErrTooLarge.
-	// Return that as an error. Any other panic remains.
-	defer func() {
-		e := recover()
-		if e == nil {
-			return
-		}
-		if panicErr, ok := e.(error); ok && panicErr == bytes.ErrTooLarge {
-			err = panicErr
-		} else {
-			panic(e)
-		}
-	}()
-	_, err = buf.ReadFrom(r)
-
-	return bytes.NewReader(buf.Bytes()), err
-}*/

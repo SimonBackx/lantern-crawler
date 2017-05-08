@@ -66,6 +66,9 @@ type Hostworker struct {
 	// voor hij overweegt om naar slaapstand te gaan
 	// als er andere domeinen 'wachten'
 	sleepAfter int
+
+	// Aantal gevonden queries in het afgelopen uur
+	matchingQueries int
 }
 
 func (w *Hostworker) String() string {
@@ -181,7 +184,19 @@ func (w *Hostworker) EmptyPendingItems() {
 }
 
 func (w *Hostworker) WantsToGetUp() bool {
-	return !w.PriorityQueue.IsEmpty() || !w.Queue.IsEmpty() || !w.LowPriorityQueue.IsEmpty()
+	result := !w.PriorityQueue.IsEmpty() || !w.Queue.IsEmpty() || !w.LowPriorityQueue.IsEmpty()
+	if result {
+		return true
+	}
+
+	// Misschien hebben we een item in de failed queue die er al uit mag komen?
+	failedItem := w.FailedQueue.First()
+	if failedItem != nil {
+		if failedItem.NeedsRetry() {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *Hostworker) AddQueue(q *CrawlQueue) {
