@@ -138,6 +138,13 @@ func (queue *CrawlQueue) Remove(item *CrawlItem) {
 	item.Queue = nil
 }
 
+func (queue *CrawlQueue) String() string {
+	if queue == nil {
+		return "<nil>"
+	}
+	return queue.Name
+}
+
 func (queue *CrawlQueue) IsEmpty() bool {
 	return queue == nil || queue.First == nil
 }

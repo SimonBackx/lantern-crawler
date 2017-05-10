@@ -157,7 +157,7 @@ func (crawler *Crawler) ProcessUrl(url *url.URL, source *url.URL) {
 		// Geen concurrency problemen mogelijk
 		// NewReference kan url ook weggooien als die al gecrawled is
 		// Depth = nil, want dit is altijd van een externe host
-		worker.NewReference(url, nil, source, nil)
+		worker.NewReference(url, nil, false)
 
 		if !worker.Sleeping && worker.WantsToGetUp() {
 			// Dit domein had geen items, maar nu wel

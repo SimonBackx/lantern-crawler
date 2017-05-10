@@ -138,7 +138,7 @@ func NewHostWorkerFromFile(file *os.File, crawler *Crawler) *Hostworker {
 func (w *Hostworker) FillAlreadyVisited(q *CrawlQueue) {
 	item := q.First
 	for item != nil {
-		uri, err := cleanURLPath(item.URL)
+		uri, err := cleanURLPath(*item.URL)
 		if err == nil {
 			w.AlreadyVisited[uri] = item
 		}
@@ -203,7 +203,7 @@ func (w *Hostworker) AddQueue(q *CrawlQueue) {
 	// Eerst nog overlopen op already visited, we kunnen dus niet rechtstreeks merge gebruiken
 	item := q.First
 	for item != nil {
-		w.NewReference(item.URL, nil, item.LastReferenceURL, nil)
+		w.NewReference(item.URL, nil, false)
 		item = item.Next
 	}
 }
@@ -504,7 +504,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 
 			if u.Hostname() == w.Host {
 				// Interne URL's meteen verwerken
-				w.NewReference(u, &item.Depth, urlRef, item)
+				w.NewReference(u, item, true)
 			} else {
 				workerResult.Append(u)
 			}
@@ -613,8 +613,9 @@ func (w *Hostworker) GetNextRequest() *CrawlItem {
 	return w.LowPriorityQueue.Pop()
 }
 
-func cleanURLPath(u *url.URL) (string, error) {
-	normalized := purell.NormalizeURL(u,
+func cleanURLPath(u url.URL) (string, error) {
+
+	normalized := purell.NormalizeURL(&u,
 		purell.FlagDecodeUnnecessaryEscapes|
 			purell.FlagUppercaseEscapes|
 			purell.FlagEncodeNecessaryEscapes|
@@ -634,14 +635,13 @@ func cleanURLPath(u *url.URL) (string, error) {
 }
 
 /**
- * Er werd een referentie gevonden naar een URL voor deze host
- * depth = nil als het van externe host komt. Anders is depth de diepte van het item waarvan de referentei afkomstig is
+ * Als internal = false mag sourceItem = nil
  */
-func (w *Hostworker) NewReference(foundUrl *url.URL, depth *int, source *url.URL, sourceItem *CrawlItem) {
-	uri, err := cleanURLPath(foundUrl)
+func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, internal bool) (*CrawlItem, error) {
+	uri, err := cleanURLPath(*foundUrl)
 	if err != nil {
 		w.crawler.cfg.LogError(err)
-		return
+		return nil, err
 	}
 
 	item, found := w.AlreadyVisited[uri]
@@ -653,28 +653,28 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, depth *int, source *url.URL
 		if item.IsUnavailable() {
 			// Deze url is onbereikbaar, ofwel geen HTML bestand
 			// dat weten we omdat we deze al eerder hebben gecrawled
-			return
+			return item, nil
 		}
 	}
 
 	now := time.Now()
 
 	// Depth aanpassen
-	if depth == nil {
+	if !internal {
 		// Referentie vanaf een ander domein
 		item.Depth = 0
 		item.LastReference = &now
-		item.LastReferenceURL = source
+		//item.LastReferenceURL = source
 
 	} else {
-		if !found || item.Depth >= *depth+1 {
-			item.Depth = *depth + 1
+		if !found || item.Depth >= sourceItem.Depth+1 {
+			item.Depth = sourceItem.Depth + 1
 			item.LastReference = &now
-			item.LastReferenceURL = source
+			//item.LastReferenceURL = source
 		}
 	}
 
-	if depth != nil && sourceItem != nil && item.Depth < maxRecrawlDepth && sourceItem.Depth > item.Depth && item.DownloadCount < sourceItem.DownloadCount && item.LastDownload != nil {
+	if internal && item.Depth < maxRecrawlDepth && sourceItem.Depth > item.Depth && item.DownloadCount < sourceItem.DownloadCount && item.LastDownload != nil {
 		// Het systeem is zo ontworpen dat een item in de priority queue enkel wordt gedownload nadat alle websites die er oorspronkelijk naar verwezen (met een lagere depth)
 		// zijn gecrawled.
 		// Hierdoor kunnen we verdwenen referenties detecteren in de priority queue. Verdwenen referenties in de gewone queue
@@ -684,9 +684,9 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, depth *int, source *url.URL
 		// Het kan ook gewoon zijn dat de pagina met de referentie bij de download onbereikbaar was en in de failedqueue staat, in dat geval
 		// wordt die toch opnieuw gedownload  en als die nog bestaat zal de diepte terug worden aangepast naar een lagere diepte
 
-		item.Depth = *depth + 1
+		item.Depth = sourceItem.Depth + 1
 		item.LastReference = &now
-		item.LastReferenceURL = source
+		//item.LastReferenceURL = source
 	}
 
 	if item.Depth < maxRecrawlDepth && (item.Queue == w.Queue || item.Queue == w.LowPriorityQueue) {
@@ -714,4 +714,6 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, depth *int, source *url.URL
 			}
 		}
 	}
+
+	return item, nil
 }
