@@ -64,12 +64,13 @@ func (c *CrawlItem) IsEqual(b *CrawlItem) bool {
 	if c.LastDownload.Equal(*b.LastDownload) {
 		return false
 	}
+
 	return true
 }
 
 func NewCrawlItem(URL *url.URL) *CrawlItem {
-	if URL.IsAbs() {
-		panic("Absolute crawl item " + URL.String())
+	if !URL.IsAbs() {
+		panic("Not absolute crawl item " + URL.String())
 	}
 	return &CrawlItem{URL: URL}
 }

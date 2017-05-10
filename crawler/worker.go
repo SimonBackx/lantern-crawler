@@ -14,10 +14,12 @@ import (
 	"time"
 )
 
-const maxRecrawlDepth = 4
+const maxRecrawlDepth = 3
+
 
 type Hostworker struct {
-	Host string
+	Host string // Domain without subdomains!
+	Scheme string // Migrate automatically external domains?
 
 	// Lijst met items die opnieuw moeten worden gecrawld met depth >= maxRecrawlDepth
 	// Een item mag hier maximum 1 maand in verblijven (= vernieuwings interval)
@@ -159,12 +161,13 @@ func (w *Hostworker) GetRecrawlDuration() time.Duration {
 }
 
 func NewHostworker(host string, crawler *Crawler) *Hostworker {
-	w := &Hostworker{
+	w := &Hostworker {
 		Host:               host,
+		Scheme:				"http",
 		Queue:              NewCrawlQueue("Queue"),
 		PriorityQueue:      NewCrawlQueue("Priority Queue"),
 		LowPriorityQueue:   NewCrawlQueue("Low Priority Queue"),
-		IntroductionPoints: NewCrawlQueue("Intoroduction points"),
+		IntroductionPoints: NewCrawlQueue("Introduction points"),
 		FailedQueue:        NewLeveledQueue(),
 
 		AlreadyVisited: make(map[string]*CrawlItem),
@@ -186,6 +189,11 @@ func (w *Hostworker) EmptyPendingItems() {
 }
 
 func (w *Hostworker) WantsToGetUp() bool {
+	if w.FailStreak > 20 && w.SucceededDownloads == 0 {
+		// Passieve modus
+		return false
+	}
+
 	result := !w.PriorityQueue.IsEmpty() || !w.Queue.IsEmpty() || !w.LowPriorityQueue.IsEmpty()
 	if result {
 		return true
@@ -248,7 +256,11 @@ func (w *Hostworker) Run(client *http.Client) {
 	w.Client = client
 
 	// Snel horizontaal uitbreiden: neem laag getal
-	w.sleepAfter = rand.Intn(20) + 1
+	if w.SucceededDownloads == 0 {
+		w.sleepAfter = rand.Intn(5) + 1
+	} else {
+		w.sleepAfter = rand.Intn(20) + 6
+	}
 
 	for {
 		select {
@@ -282,7 +294,7 @@ func (w *Hostworker) Run(client *http.Client) {
 
 func (w *Hostworker) Request(item *CrawlItem) {
 
-	if request, err := http.NewRequest("GET", "http://"+w.Host+item.URL.String(), nil); err == nil {
+	if request, err := http.NewRequest("GET", item.URL.String(), nil); err == nil {
 		request.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1; rv:45.0) Gecko/20100101 Firefox/45.0")
 		request.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 		request.Header.Add("Accept_Language", "en-US,en;q=0.5")
@@ -297,11 +309,16 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			if response.StatusCode < 200 || response.StatusCode >= 300 {
 
 				// Special exceptions
-				switch response.StatusCode {
-				case 429:
+				if response.StatusCode == 429 {
 					w.sleepAfter = -1
 					w.crawler.cfg.Log("WARNING", "Too many requests for host "+w.String())
 					w.RequestFailed(item)
+					return
+				}
+
+				// ignore range: 400 - 406
+				if response.StatusCode >= 400 && response.StatusCode <= 406 {
+					w.RequestIgnored(item)
 					return
 				}
 
@@ -326,7 +343,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				//w.crawler.cfg.LogInfo("Response: Content too long")
 				// Too big
 				// Eventueel op een ignore list zetten
-				item.Ignore = true
+				w.RequestIgnored(item)
 				return
 			}
 
@@ -346,7 +363,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			if contentType != "text/html; charset=utf-8" {
 				//w.crawler.cfg.LogInfo("Not a HTML file")
 				// Op ignore list zetten
-				item.Ignore = true
+				w.RequestIgnored(item)
 				return
 			}
 
@@ -380,6 +397,8 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				w.crawler.speedLogger.Timeouts++
 			} else if strings.Contains(str, "stopped after 10 redirects") {
 				item.Ignore = true
+			} else if strings.Contains(str, "server gave HTTP response to HTTPS client") {
+				w.Scheme = "http"
 			} else if strings.Contains(str, "context canceled") {
 				// Negeer failcount bij handmatige cancel
 				item.FailCount--
@@ -405,10 +424,24 @@ func (w *Hostworker) Request(item *CrawlItem) {
 }
 
 func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, reader io.Reader) bool {
-	// Todo: status code controleren en dit correct afhandelen.
+	// todo: redirect detecteren en aanpassingen maken hieraan
+
+	if response.Request.URL.Scheme == "https" {
+		if w.Scheme != "https" {
+			w.crawler.cfg.LogInfo(w.String()+" switched to https")
+		}
+		w.Scheme = "https"
+	} else if response.Request.URL.Scheme == "http" {
+		if w.Scheme == "https" {
+			w.crawler.cfg.LogInfo(w.String()+" downgraded to http")
+		}
+		w.Scheme = "http"
+	}
 
 	requestUrl := *response.Request.URL
 	urlRef := &requestUrl
+
+	// Todo: detect domain changed + update item url
 
 	// Doorgeven aan parser
 	result, err := Parse(reader, w.crawler.Queries)
@@ -568,6 +601,10 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 	item.LastDownloadStarted = nil
 }
 
+func (w *Hostworker) RequestIgnored(item *CrawlItem) {
+	item.Ignore = true
+}
+
 func (w *Hostworker) RequestFailed(item *CrawlItem) {
 	item.FailCount++
 
@@ -575,9 +612,12 @@ func (w *Hostworker) RequestFailed(item *CrawlItem) {
 		// 2e poging is ook mislukt
 		w.FailStreak++
 
-		if w.FailStreak > 10 {
+		if w.FailStreak > 3 {
 			// Meteen stoppen
 			w.sleepAfter = -1
+
+			// Terug http proberen voor moest https toch niet meer kloppen
+			w.Scheme = "http"
 			w.crawler.cfg.LogInfo("Failstreak voor " + w.String())
 		}
 	}
@@ -619,6 +659,7 @@ func (w *Hostworker) GetNextRequest() *CrawlItem {
 }
 
 func cleanURLPath(u url.URL) (string, error) {
+	u.Scheme = "" // todo: checken?
 
 	normalized := purell.NormalizeURL(&u,
 		purell.FlagDecodeUnnecessaryEscapes|
@@ -636,7 +677,7 @@ func cleanURLPath(u url.URL) (string, error) {
 		return "", err
 	}
 
-	return clean.EscapedPath(), nil
+	return clean.String(), nil
 }
 
 /**
@@ -649,16 +690,8 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 		return nil, err
 	}
 
-	if foundUrl.IsAbs() {
-		str := foundUrl.RequestURI()
-		newUrl, err := url.ParseRequestURI(str)
-		if err != nil {
-			w.crawler.cfg.LogError(err)
-			return nil, err
-		}
-		foundUrl = newUrl
-	} else {
-		w.crawler.cfg.LogInfo("Relative url received")
+	if !foundUrl.IsAbs() {
+		return nil, nil
 	}
 
 	item, found := w.AlreadyVisited[uri]
@@ -669,6 +702,9 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 		} else {
 			// New introduction point
 			item.Cycle = w.LatestCycle
+
+			// Schema meteen juist zetten
+			item.URL.Scheme = w.Scheme
 		}
 
 		w.AlreadyVisited[uri] = item
