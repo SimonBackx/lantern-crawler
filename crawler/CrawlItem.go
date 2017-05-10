@@ -13,10 +13,10 @@ const crawlItemTimeFormat = "2006-01-02-15:04:05.999999999"
 const maxFailCount = 6
 
 type CrawlItem struct {
-	URL           *url.URL
-	Depth         int
-	DownloadCount int
-	Ignore        bool
+	URL    *url.URL
+	Depth  int
+	Cycle  int
+	Ignore bool
 
 	// Aantal opeenvolgende mislukte downloads
 	FailCount           int
@@ -58,9 +58,9 @@ func NewCrawlItemFromString(str *string) *CrawlItem {
 		return nil
 	}
 
-	downloadCount, err := strconv.Atoi(parts[2])
+	cycle, err := strconv.Atoi(parts[2])
 	if err != nil {
-		fmt.Println("ongeldige download count")
+		fmt.Println("ongeldige cycle")
 		return nil
 	}
 
@@ -81,7 +81,7 @@ func NewCrawlItemFromString(str *string) *CrawlItem {
 	return &CrawlItem{
 		URL:           url,
 		Depth:         depth,
-		DownloadCount: downloadCount,
+		Cycle:         cycle,
 		LastDownload:  &download,
 		LastReference: &reference,
 	}
@@ -152,5 +152,5 @@ func TimeToString(time *time.Time) string {
 }
 
 func (i *CrawlItem) SaveToString() string {
-	return fmt.Sprintf("%s	%v	%v	%s	%s", i.URL, i.Depth, i.DownloadCount, TimeToString(i.LastDownload), TimeToString(i.LastReference))
+	return fmt.Sprintf("%s	%v	%v	%s	%s", i.URL, i.Depth, i.Cycle, TimeToString(i.LastDownload), TimeToString(i.LastReference))
 }

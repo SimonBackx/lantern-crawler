@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const maxRecrawlDepth = 2
+const maxRecrawlDepth = 4
 
 type Hostworker struct {
 	Host string
@@ -69,6 +69,8 @@ type Hostworker struct {
 
 	// Aantal gevonden queries in het afgelopen uur
 	matchingQueries int
+
+	LatestCycle int
 }
 
 func (w *Hostworker) String() string {
@@ -211,12 +213,19 @@ func (w *Hostworker) AddQueue(q *CrawlQueue) {
 /// Start een hercrawl cyclus. Voer dit enkel uit als de worker niet
 /// 'aan' staat.
 func (w *Hostworker) Recrawl() {
+	w.LatestCycle++
+
 	if w.crawler.cfg.LogRecrawlingEnabled {
 		w.crawler.cfg.LogInfo("Recrawl initiated for " + w.String())
 	}
 
+	if !w.PriorityQueue.IsEmpty() {
+		w.crawler.cfg.Log("warning", "Recrawl initiated before priority queue became empty")
+	}
+
 	item := w.IntroductionPoints.First
 	for item != nil {
+		item.Cycle = w.LatestCycle
 		next := item.Next
 		item.Remove()
 		w.PriorityQueue.Push(item)
@@ -523,9 +532,6 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 func (w *Hostworker) RequestStarted(item *CrawlItem) {
 	w.sleepAfter--
 
-	// DownloadCount verhogen ongeacht gelukt of mislukt (is noodzakelijk detectie verdwenen referenties)
-	item.DownloadCount++
-
 	//w.crawler.cfg.LogInfo(fmt.Sprintf("Request started. %v", item.URL.String()))
 	now := time.Now()
 	item.LastDownloadStarted = &now
@@ -647,6 +653,13 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 	item, found := w.AlreadyVisited[uri]
 	if !found {
 		item = NewCrawlItem(foundUrl)
+		if internal {
+			item.Cycle = sourceItem.Cycle
+		} else {
+			// New introduction point
+			item.Cycle = w.LatestCycle
+		}
+
 		w.AlreadyVisited[uri] = item
 		w.crawler.speedLogger.NewURLsCount++
 	} else {
@@ -674,7 +687,7 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 		}
 	}
 
-	if internal && item.Depth < maxRecrawlDepth && sourceItem.Depth > item.Depth && item.DownloadCount < sourceItem.DownloadCount && item.LastDownload != nil {
+	if internal && item.Depth < maxRecrawlDepth && sourceItem.Depth > item.Depth && item.Cycle < sourceItem.Cycle && item.LastDownload != nil {
 		// Het systeem is zo ontworpen dat een item in de priority queue enkel wordt gedownload nadat alle websites die er oorspronkelijk naar verwezen (met een lagere depth)
 		// zijn gecrawled.
 		// Hierdoor kunnen we verdwenen referenties detecteren in de priority queue. Verdwenen referenties in de gewone queue
@@ -697,7 +710,7 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 
 		w.crawler.speedLogger.SwitchesToPriority++
 
-	} else if item.Queue == nil && (!found || (item.NeedsRecrawl() && item.LastReference == &now)) {
+	} else if item.Queue == nil && (!found || item.Cycle < sourceItem.Cycle) {
 		// Enkel recrawl toelaten van referentie van lagere depth
 		// Staat niet in een queue maar heeft wel een recrawl nodig
 
@@ -713,6 +726,11 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 				w.crawler.speedLogger.NewLowPriorityQueue++
 			}
 		}
+	}
+
+	// Cycle aanpassen
+	if internal && item.Cycle < sourceItem.Cycle {
+		item.Cycle = sourceItem.Cycle
 	}
 
 	return item, nil
