@@ -23,6 +23,7 @@ type CrawlItem struct {
 	LastDownloadStarted *time.Time
 
 	// Laatste tijdstip dat deze pagina successvol werd gedownload en al haar link's werden verwerkt
+	// nodig voor intrudction points
 	LastDownload *time.Time
 
 	// Positie in de queue (enkel aanpassen in CrawlQueue!)
@@ -31,13 +32,51 @@ type CrawlItem struct {
 	Queue    *CrawlQueue
 }
 
+func (c *CrawlItem) IsEqual(b *CrawlItem) bool {
+	if b == nil || c == nil {
+		return false
+	}
+
+	if c.URL.String() != b.URL.String() {
+		return false
+	}
+
+	if c.Depth != b.Depth {
+		return false
+	}
+
+	if c.Cycle != b.Cycle {
+		return false
+	}
+
+	if c.Ignore != b.Ignore {
+		return false
+	}
+
+	if c.FailCount != b.FailCount {
+		return false
+	}
+
+	if !(c.LastDownloadStarted == nil && b.LastDownloadStarted == nil) && (c.LastDownloadStarted == nil || b.LastDownloadStarted == nil || c.LastDownloadStarted.Equal(*b.LastDownloadStarted)) {
+		return false
+	}
+
+	if c.LastDownload.Equal(*b.LastDownload) {
+		return false
+	}
+	return true
+}
+
 func NewCrawlItem(URL *url.URL) *CrawlItem {
+	if URL.IsAbs() {
+		panic("Absolute crawl item " + URL.String())
+	}
 	return &CrawlItem{URL: URL}
 }
 
 func NewCrawlItemFromString(str *string) *CrawlItem {
 	parts := strings.Split(*str, "	")
-	if len(parts) != 5 {
+	if len(parts) != 7 {
 		fmt.Println("Ongeldig aantal tabs")
 		return nil
 	}
@@ -60,18 +99,49 @@ func NewCrawlItemFromString(str *string) *CrawlItem {
 		return nil
 	}
 
+	ignore := (parts[3] == "true")
+	if parts[3] != "false" && parts[3] != "true" {
+		fmt.Println("ongeldige ignore")
+		return nil
+	}
+
+	failCount, err := strconv.Atoi(parts[4])
+	if err != nil {
+		fmt.Println("ongeldige failCount")
+		return nil
+	}
+
 	// Als parse mislukt -> nil (dan was het wrs ook nil)
-	download, err := time.Parse(crawlItemTimeFormat, parts[3])
-	if len(parts[3]) > 0 && err != nil {
+	var d *time.Time
+	download, err := time.Parse(crawlItemTimeFormat, parts[5])
+	if len(parts[5]) > 0 && err != nil {
 		fmt.Println("ongeldige download datum")
 		return nil
 	}
 
+	if err == nil {
+		d = &download
+	}
+
+	var ds *time.Time
+	downloadStarted, err := time.Parse(crawlItemTimeFormat, parts[6])
+	if len(parts[6]) > 0 && err != nil {
+		fmt.Println("ongeldige download started datum")
+		return nil
+	}
+
+	if err == nil {
+		ds = &downloadStarted
+	}
+
 	return &CrawlItem{
-		URL:          url,
-		Depth:        depth,
-		Cycle:        cycle,
-		LastDownload: &download,
+		URL:                 url,
+		Depth:               depth,
+		Cycle:               cycle,
+		Ignore:              ignore,
+		FailCount:           failCount,
+		LastDownload:        d,
+		LastDownloadStarted: ds,
 	}
 }
 
@@ -111,16 +181,6 @@ func (i *CrawlItem) NeedsRetry() bool {
 	return answer
 }
 
-/*func (i *CrawlItem) NeedsRecrawl() bool {
-	if i.LastDownload == nil || i.IsUnavailable() {
-		return false
-	}
-
-	// Een pagina maar opnieuw crawlen na 30 minuten. Dit moet altijd
-	// veel lager liggen dan het recrawl interval!
-	return time.Since(*i.LastDownload) > 30*time.Minute
-}*/
-
 /**
  * Remove is noodzakelijk voor wanneer de depth aangepast wordt
  * @param  {[type]} i *CrawlItem)   Remove( [description]
@@ -140,5 +200,5 @@ func TimeToString(time *time.Time) string {
 }
 
 func (i *CrawlItem) SaveToString() string {
-	return fmt.Sprintf("%s	%v	%v	%s	%s", i.URL, i.Depth, i.Cycle, TimeToString(i.LastDownload))
+	return fmt.Sprintf("%s	%v	%v	%v	%v	%s	%s", i.URL, i.Depth, i.Cycle, i.Ignore, i.FailCount, TimeToString(i.LastDownload), TimeToString(i.LastDownloadStarted))
 }

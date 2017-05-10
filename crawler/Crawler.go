@@ -2,7 +2,6 @@ package crawler
 
 import (
 	"context"
-	"fmt"
 	"github.com/SimonBackx/lantern-crawler/distributors"
 	"github.com/SimonBackx/lantern-crawler/queries"
 	"io/ioutil"
@@ -133,8 +132,8 @@ func (crawler *Crawler) RefreshQueries() {
 	crawler.Queries = queries
 }
 
-func (crawler *Crawler) ProcessUrl(url *url.URL, source *url.URL) {
-	host := url.Hostname()
+func (crawler *Crawler) ProcessUrl(u *url.URL, source *url.URL) {
+	host := u.Hostname()
 	worker := crawler.Workers[host]
 
 	if worker == nil {
@@ -149,14 +148,13 @@ func (crawler *Crawler) ProcessUrl(url *url.URL, source *url.URL) {
 	// Crawler queue pushen
 	if worker.Running {
 		// Pushen d.m.v. channel om concurrency problemen te vermijden
-		// todo: stack maken van url's ipv crawlitems
-		item := NewCrawlItem(url)
-		worker.NewItems.stack(item)
+		worker.NewItems.stack(u)
+
 	} else {
 		// Geen concurrency problemen mogelijk
 		// NewReference kan url ook weggooien als die al gecrawled is
 		// Depth = nil, want dit is altijd van een externe host
-		worker.NewReference(url, nil, false)
+		worker.NewReference(u, nil, false)
 
 		if !worker.Sleeping && worker.WantsToGetUp() {
 			// Dit domein had geen items, maar nu wel
@@ -313,7 +311,7 @@ func (crawler *Crawler) Start(signal chan int) {
 
 		if e := recover(); e != nil {
 			//log and so other stuff
-			crawler.cfg.Log("Panic", fmt.Sprintf("%v", e))
+			crawler.cfg.Log("Panic", identifyPanic())
 		}
 
 		crawler.Quit()

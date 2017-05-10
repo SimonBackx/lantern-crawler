@@ -201,12 +201,10 @@ func (w *Hostworker) WantsToGetUp() bool {
 	return false
 }
 
-func (w *Hostworker) AddQueue(q *CrawlQueue) {
+func (w *Hostworker) AddQueue(q []*url.URL) {
 	// Eerst nog overlopen op already visited, we kunnen dus niet rechtstreeks merge gebruiken
-	item := q.First
-	for item != nil {
-		w.NewReference(item.URL, nil, false)
-		item = item.Next
+	for _, item := range q {
+		w.NewReference(item, nil, false)
 	}
 }
 
@@ -283,7 +281,8 @@ func (w *Hostworker) Run(client *http.Client) {
 }
 
 func (w *Hostworker) Request(item *CrawlItem) {
-	if request, err := http.NewRequest("GET", item.URL.String(), nil); err == nil {
+
+	if request, err := http.NewRequest("GET", "http://"+w.Host+item.URL.String(), nil); err == nil {
 		request.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1; rv:45.0) Gecko/20100101 Firefox/45.0")
 		request.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 		request.Header.Add("Accept_Language", "en-US,en;q=0.5")
@@ -566,7 +565,7 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 
 	now := time.Now()
 	item.LastDownload = &now
-
+	item.LastDownloadStarted = nil
 }
 
 func (w *Hostworker) RequestFailed(item *CrawlItem) {
@@ -650,6 +649,18 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 		return nil, err
 	}
 
+	if foundUrl.IsAbs() {
+		str := foundUrl.RequestURI()
+		newUrl, err := url.ParseRequestURI(str)
+		if err != nil {
+			w.crawler.cfg.LogError(err)
+			return nil, err
+		}
+		foundUrl = newUrl
+	} else {
+		w.crawler.cfg.LogInfo("Relative url received")
+	}
+
 	item, found := w.AlreadyVisited[uri]
 	if !found {
 		item = NewCrawlItem(foundUrl)
@@ -699,9 +710,11 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 
 		w.crawler.speedLogger.SwitchesToPriority++
 
-	} else if item.Queue == nil && (!found || item.Cycle < sourceItem.Cycle) {
-		// Enkel recrawl toelaten van referentie van lagere depth
-		// Staat niet in een queue maar heeft wel een recrawl nodig
+	} else if item.Queue == nil && (!found || (internal && item.Cycle < sourceItem.Cycle)) {
+		// Recrawl enkel toelaten als we dit item nog niet gevonden hebben
+		// of we hebben het wel al gevonden en het is een interne link afkomstig van een
+		// hogere cycle (recrawl). Externe links die we al gecrawled hebben
+		// negeren we, die staan in de introduction queue
 
 		if item.Depth < maxRecrawlDepth {
 			w.PriorityQueue.Push(item)
