@@ -25,10 +25,6 @@ type CrawlItem struct {
 	// Laatste tijdstip dat deze pagina successvol werd gedownload en al haar link's werden verwerkt
 	LastDownload *time.Time
 
-	// Laatste tijdstip waarop een URL gevonden werd naar deze pagina
-	LastReference    *time.Time
-	LastReferenceURL *url.URL
-
 	// Positie in de queue (enkel aanpassen in CrawlQueue!)
 	Next     *CrawlItem
 	Previous *CrawlItem
@@ -71,19 +67,11 @@ func NewCrawlItemFromString(str *string) *CrawlItem {
 		return nil
 	}
 
-	reference, err := time.Parse(crawlItemTimeFormat, parts[4])
-
-	if len(parts[4]) > 0 && err != nil {
-		fmt.Println("ongeldige reference datum")
-		return nil
-	}
-
 	return &CrawlItem{
-		URL:           url,
-		Depth:         depth,
-		Cycle:         cycle,
-		LastDownload:  &download,
-		LastReference: &reference,
+		URL:          url,
+		Depth:        depth,
+		Cycle:        cycle,
+		LastDownload: &download,
 	}
 }
 
@@ -123,7 +111,7 @@ func (i *CrawlItem) NeedsRetry() bool {
 	return answer
 }
 
-func (i *CrawlItem) NeedsRecrawl() bool {
+/*func (i *CrawlItem) NeedsRecrawl() bool {
 	if i.LastDownload == nil || i.IsUnavailable() {
 		return false
 	}
@@ -131,7 +119,7 @@ func (i *CrawlItem) NeedsRecrawl() bool {
 	// Een pagina maar opnieuw crawlen na 30 minuten. Dit moet altijd
 	// veel lager liggen dan het recrawl interval!
 	return time.Since(*i.LastDownload) > 30*time.Minute
-}
+}*/
 
 /**
  * Remove is noodzakelijk voor wanneer de depth aangepast wordt
@@ -152,5 +140,5 @@ func TimeToString(time *time.Time) string {
 }
 
 func (i *CrawlItem) SaveToString() string {
-	return fmt.Sprintf("%s	%v	%v	%s	%s", i.URL, i.Depth, i.Cycle, TimeToString(i.LastDownload), TimeToString(i.LastReference))
+	return fmt.Sprintf("%s	%v	%v	%s	%s", i.URL, i.Depth, i.Cycle, TimeToString(i.LastDownload))
 }

@@ -670,36 +670,25 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 		}
 	}
 
-	now := time.Now()
-
 	// Depth aanpassen
 	if !internal {
 		// Referentie vanaf een ander domein
 		item.Depth = 0
-		item.LastReference = &now
-		//item.LastReferenceURL = source
 
 	} else {
 		if !found || item.Depth >= sourceItem.Depth+1 {
 			item.Depth = sourceItem.Depth + 1
-			item.LastReference = &now
-			//item.LastReferenceURL = source
 		}
 	}
 
-	if internal && item.Depth < maxRecrawlDepth && sourceItem.Depth > item.Depth && item.Cycle < sourceItem.Cycle && item.LastDownload != nil {
-		// Het systeem is zo ontworpen dat een item in de priority queue enkel wordt gedownload nadat alle websites die er oorspronkelijk naar verwezen (met een lagere depth)
-		// zijn gecrawled.
-		// Hierdoor kunnen we verdwenen referenties detecteren in de priority queue. Verdwenen referenties in de gewone queue
-		// zijn niet relevant aangezien die de gebruikte queue niet beïnvloeden.
-		// Als een website met een hogere diepte verwijst naar een website met een lagere diepte, en als blijkt dat die website minder werd gedownload,
-		// dan is er een referentie verloren.
-		// Het kan ook gewoon zijn dat de pagina met de referentie bij de download onbereikbaar was en in de failedqueue staat, in dat geval
-		// wordt die toch opnieuw gedownload  en als die nog bestaat zal de diepte terug worden aangepast naar een lagere diepte
+	if internal && item.Cycle < sourceItem.Cycle {
+		// Als een nieuwere cycle refereert naar deze pagina, dan kan
+		// die de depth verhogen. Dit kan slechts één keer gebeuren,
+		// aangezien hierna de cycle terug wordt gelijk gesteld
+		// Daarna kan de depth enkel nog verlagen tot de volgende cycle
+		// Op die manier houdt het systeem rekening met verloren / gewijzigde referenties
 
 		item.Depth = sourceItem.Depth + 1
-		item.LastReference = &now
-		//item.LastReferenceURL = source
 	}
 
 	if item.Depth < maxRecrawlDepth && (item.Queue == w.Queue || item.Queue == w.LowPriorityQueue) {

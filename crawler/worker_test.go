@@ -53,6 +53,7 @@ func TestWorkerDepth(test *testing.T) {
 	// Nieuwe pagina's
 
 	recrawl := 0
+	var contact_item *CrawlItem
 	for recrawl < 50000 {
 		test.Logf("Recrawl %v\n", recrawl)
 		//fmt.Println("Recrawl loop")
@@ -64,7 +65,11 @@ func TestWorkerDepth(test *testing.T) {
 			//fmt.Printf("Depth %v, cycle %v\n", next.Depth, next.Cycle)
 
 			root_copy, _ := worker1.NewReference(u, next, true)
-			contact_item, _ := worker1.NewReference(url1, next, true)
+
+			if next != root || recrawl == 0 {
+				contact_item, _ = worker1.NewReference(url1, next, true)
+			}
+
 			info_item, _ := worker1.NewReference(url2, next, true)
 
 			if root_copy != root || root_copy.Depth != 0 {
@@ -73,7 +78,7 @@ func TestWorkerDepth(test *testing.T) {
 			}
 
 			if i == 0 {
-				if contact_item.Depth != 1 || contact_item.Queue != worker1.PriorityQueue || info_item.Depth != 1 || info_item.Queue != worker1.PriorityQueue {
+				if recrawl == 0 && (contact_item.Depth != 1 || contact_item.Queue != worker1.PriorityQueue) {
 					test.Log("Depth / queue not set correctly on repeating pages")
 					test.Logf("Contact_item depth = %v\n", contact_item.Depth)
 
@@ -81,16 +86,33 @@ func TestWorkerDepth(test *testing.T) {
 					test.Fail()
 				}
 
-				if contact_item.Cycle != recrawl {
+				if info_item.Depth != 1 || info_item.Queue != worker1.PriorityQueue {
+					test.Log("Depth / queue not set correctly on repeating pages (info_item)")
+					test.Logf("info_item depth = %v\n", contact_item.Depth)
+
+					test.Logf("info_item queue = %s\n", contact_item.Queue)
+					test.Fail()
+				}
+
+				if info_item.Cycle != recrawl {
 					test.Log("Cycle not set correctly on repeating pages")
 					test.Fail()
 				}
 			} else {
-				if contact_item.Depth != 1 || info_item.Depth != 1 {
-					test.Log("Depth not set correctly on repeating pages")
-					test.Logf("Contact_item depth = %v\n", contact_item.Depth)
-					test.Fail()
+				if recrawl > 0 {
+					if info_item.Depth != 1 {
+						test.Log("Depth not set correctly on repeating pages")
+						test.Logf("info_item depth = %v\n", info_item.Depth)
+						test.Fail()
+					}
+				} else {
+					if contact_item.Depth != 1 || info_item.Depth != 1 {
+						test.Log("Depth not set correctly on repeating pages")
+						test.Logf("Contact_item depth = %v\n", contact_item.Depth)
+						test.Fail()
+					}
 				}
+
 			}
 
 			if next.Depth < 15 {
@@ -104,6 +126,7 @@ func TestWorkerDepth(test *testing.T) {
 
 				if page1.Depth != next.Depth+1 || page2.Depth != next.Depth+1 {
 					test.Logf("Depth not set correctly on new pages, is %v, should be %v\n", page1.Depth, next.Depth+1)
+					test.Log(page1.URL.String())
 
 					test.Fail()
 				}
@@ -159,6 +182,15 @@ func TestWorkerDepth(test *testing.T) {
 
 			if test.Failed() {
 				test.Fatal("infinite loop?")
+			}
+		}
+
+		if recrawl > 2 {
+			// Eerste recrawl achter de rug, depth van contact pagina moet aangepast zijn
+			if contact_item.Depth != 2 {
+				test.Log("Depth for death pages not recovered")
+				test.Logf("Contact_item depth = %v != 2\n", contact_item.Depth)
+				test.Fail()
 			}
 		}
 

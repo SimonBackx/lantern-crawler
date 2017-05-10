@@ -151,7 +151,6 @@ func (crawler *Crawler) ProcessUrl(url *url.URL, source *url.URL) {
 		// Pushen d.m.v. channel om concurrency problemen te vermijden
 		// todo: stack maken van url's ipv crawlitems
 		item := NewCrawlItem(url)
-		item.LastReferenceURL = source
 		worker.NewItems.stack(item)
 	} else {
 		// Geen concurrency problemen mogelijk
