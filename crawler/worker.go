@@ -150,6 +150,38 @@ func (w *Hostworker) ReadFromReader(reader *bufio.Reader) {
 		}
 		line, _, _ = reader.ReadLine()
 	}
+
+	// Alle queue's toevoegen aan already visited
+	var item *CrawlItem
+	item = w.IntroductionPoints.First
+	for item != nil {
+		w.VisitedItem(item)
+		item = item.Next
+	}
+	item = w.PriorityQueue.First
+	for item != nil {
+		w.VisitedItem(item)
+		item = item.Next
+	}
+	item = w.Queue.First
+	for item != nil {
+		w.VisitedItem(item)
+		item = item.Next
+	}
+	item = w.LowPriorityQueue.First
+	for item != nil {
+		w.VisitedItem(item)
+		item = item.Next
+	}
+
+	for _, queue := range w.FailedQueue.Levels {
+		item = queue.First
+		for item != nil {
+			w.VisitedItem(item)
+			item = item.Next
+		}
+	}
+
 }
 
 func (w *Hostworker) SaveToWriter(writer *bufio.Writer) {
@@ -222,6 +254,19 @@ func (w *Hostworker) IsEqual(b *Hostworker) bool {
 	}
 
 	// todo: already visited checken!
+	if len(w.AlreadyVisited) != len(b.AlreadyVisited) {
+		return false
+	}
+
+	for key, value := range w.AlreadyVisited {
+		other, found := b.AlreadyVisited[key]
+		if !found {
+			return false
+		}
+		if !value.IsEqual(other) {
+			return false
+		}
+	}
 
 	return true
 }

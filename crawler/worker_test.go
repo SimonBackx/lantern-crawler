@@ -61,7 +61,7 @@ func TestWorkerDepth(test *testing.T) {
 	recrawl := 0
 	var contact_item *CrawlItem
 	for recrawl < 50000 {
-		test.Logf("Recrawl %v\n", recrawl)
+		//test.Logf("Recrawl %v\n", recrawl)
 		//fmt.Println("Recrawl loop")
 
 		i := 0
