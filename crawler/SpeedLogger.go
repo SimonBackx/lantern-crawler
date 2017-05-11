@@ -80,6 +80,15 @@ func (logger *SpeedLogger) Run() {
 		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("Low-priority Queue	+%v	-%v", logger.NewLowPriorityQueue, logger.PoppedFromLowPriorityQueue))
 		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("Failed Queue 		+%v	-%v", logger.NewFailedQueue, logger.PoppedFromFailedQueue))
 
+		// Als er veel timeouts zijn -> vertragen
+		if logger.Timeouts > 10 && logger.Crawler.distributor.AvailableClients() >= 0 {
+			logger.Crawler.distributor.DecreaseClients()
+		}
+
+		if logger.Timeouts == 0 && logger.Count < 1000 && logger.Crawler.distributor.AvailableClients() == 0 {
+			logger.Crawler.distributor.IncreaseClients()
+		}
+
 		logger.Count = 0
 		logger.DownloadSize = 0
 		logger.DownloadTime = 0
