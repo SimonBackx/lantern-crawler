@@ -2,7 +2,6 @@ package distributors
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net/http"
 	"time"
 )
@@ -13,6 +12,7 @@ type Distributor interface {
 	DecreaseClients()
 	IncreaseClients()
 	AvailableClients() int
+	UsedClients() int
 }
 
 type Clearnet struct {
@@ -52,19 +52,20 @@ func (dist *Clearnet) FreeClient(client *http.Client) {
 }
 
 func (dist *Clearnet) DecreaseClients() {
-	if dist.Count < 50 {
+	if dist.Count < 10 {
 		return
 	}
 	dist.Count = int(float64(dist.Count) * 0.8)
-
-	fmt.Printf("Clients decreased to %v (%v used)\n", dist.Count, dist.Used)
 }
 
 func (dist *Clearnet) IncreaseClients() {
 	dist.Count = int(float64(dist.Count) * 1.1)
-	fmt.Printf("Clients increased to %v (%v used)\n", dist.Count, dist.Used)
 }
 
 func (dist *Clearnet) AvailableClients() int {
 	return dist.Count - dist.Used
+}
+
+func (dist *Clearnet) UsedClients() int {
+	return dist.Used
 }

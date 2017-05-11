@@ -56,7 +56,7 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 
 	var distributor distributors.Distributor
 	if cfg.UseTorProxy {
-		//distributor = distributors.NewTor()
+		distributor = distributors.NewTor()
 	} else {
 		distributor = distributors.NewClearnet()
 	}

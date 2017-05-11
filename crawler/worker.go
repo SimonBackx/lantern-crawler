@@ -16,9 +16,8 @@ import (
 
 const maxRecrawlDepth = 3
 
-
 type Hostworker struct {
-	Host string // Domain without subdomains!
+	Host   string // Domain without subdomains!
 	Scheme string // Migrate automatically external domains?
 
 	// Lijst met items die opnieuw moeten worden gecrawld met depth >= maxRecrawlDepth
@@ -161,9 +160,9 @@ func (w *Hostworker) GetRecrawlDuration() time.Duration {
 }
 
 func NewHostworker(host string, crawler *Crawler) *Hostworker {
-	w := &Hostworker {
+	w := &Hostworker{
 		Host:               host,
-		Scheme:				"http",
+		Scheme:             "http",
 		Queue:              NewCrawlQueue("Queue"),
 		PriorityQueue:      NewCrawlQueue("Priority Queue"),
 		LowPriorityQueue:   NewCrawlQueue("Low Priority Queue"),
@@ -259,7 +258,7 @@ func (w *Hostworker) Run(client *http.Client) {
 	if w.SucceededDownloads == 0 {
 		w.sleepAfter = rand.Intn(5) + 1
 	} else {
-		w.sleepAfter = rand.Intn(40) + 6
+		w.sleepAfter = rand.Intn(20) + 6
 	}
 
 	for {
@@ -278,7 +277,7 @@ func (w *Hostworker) Run(client *http.Client) {
 			}
 
 			// Onderstaande kansverdeling moet nog minder uniform gemaakt worden
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(3000)+5000))
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(2000)+2000))
 
 			w.RequestStarted(item)
 			w.Request(item)
@@ -392,9 +391,9 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				// Even negeren
 				w.FailStreak--
 			} else if strings.Contains(str, "Client.Timeout") {
-				w.crawler.speedLogger.Timeouts++
+				w.crawler.speedLogger.LogTimeout()
 			} else if strings.Contains(str, "timeout") {
-				w.crawler.speedLogger.Timeouts++
+				w.crawler.speedLogger.LogTimeout()
 			} else if strings.Contains(str, "stopped after 10 redirects") {
 				w.RequestIgnored(item)
 				return
@@ -459,7 +458,6 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 				apiResult.Title = &host
 			}
 
-			w.crawler.cfg.LogInfo("Found " + *apiResult.Snippet + " at " + w.String() + item.String())
 			w.crawler.ApiController.SaveResult(apiResult)
 		}
 	}
@@ -522,7 +520,6 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 					// Terug samenvoegen
 					domains[len(domains)-2] = domain
 					u.Host = strings.Join(domains, ".")
-					w.crawler.cfg.LogInfo("Fixed invalid onion url")
 				}
 			} else {
 				if len(domains[len(domains)-1]) < 2 {
@@ -595,12 +592,6 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 
 	if item.FailCount > 0 {
 		item.FailCount = 0
-		w.crawler.speedLogger.LogSuccessfulRetry()
-	}
-
-	if item.LastDownload != nil {
-		// Recrawl
-		w.crawler.speedLogger.RecrawlCount++
 	}
 
 	now := time.Now()
@@ -622,8 +613,6 @@ func (w *Hostworker) RequestFailed(item *CrawlItem) {
 		if w.FailStreak > 3 {
 			// Meteen stoppen
 			w.sleepAfter = -1
-
-			w.crawler.cfg.LogInfo("Failstreak voor " + w.String())
 		}
 	}
 
@@ -631,9 +620,6 @@ func (w *Hostworker) RequestFailed(item *CrawlItem) {
 		// We wagen nog een poging binnen een uurtje
 		// Toevoegen aan failqueue
 		w.FailedQueue.Push(item, item.FailCount)
-		w.crawler.speedLogger.NewFailedQueue++
-	} else {
-		w.crawler.speedLogger.LogUnavailable()
 	}
 }
 
@@ -641,17 +627,14 @@ func (w *Hostworker) GetNextRequest() *CrawlItem {
 	f := w.FailedQueue.Pop()
 
 	if f != nil {
-		w.crawler.speedLogger.PoppedFromFailedQueue++
 		return f
 	}
 
 	if !w.PriorityQueue.IsEmpty() {
-		w.crawler.speedLogger.PoppedFromPriorityQueue++
 		return w.PriorityQueue.Pop()
 	}
 
 	if !w.Queue.IsEmpty() {
-		w.crawler.speedLogger.PoppedFromQueue++
 		return w.Queue.Pop()
 	}
 
@@ -659,7 +642,6 @@ func (w *Hostworker) GetNextRequest() *CrawlItem {
 		return nil
 	}
 
-	w.crawler.speedLogger.PoppedFromLowPriorityQueue++
 	return w.LowPriorityQueue.Pop()
 }
 
@@ -713,7 +695,6 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 		}
 
 		w.AlreadyVisited[uri] = item
-		w.crawler.speedLogger.NewURLsCount++
 	} else {
 		if item.IsUnavailable() {
 			// Deze url is onbereikbaar, ofwel geen HTML bestand
@@ -749,8 +730,6 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 		item.Remove()
 		w.PriorityQueue.Push(item)
 
-		w.crawler.speedLogger.SwitchesToPriority++
-
 	} else if item.Queue == nil && (!found || (internal && item.Cycle < sourceItem.Cycle)) {
 		// Recrawl enkel toelaten als we dit item nog niet gevonden hebben
 		// of we hebben het wel al gevonden en het is een interne link afkomstig van een
@@ -759,14 +738,11 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 
 		if item.Depth < maxRecrawlDepth {
 			w.PriorityQueue.Push(item)
-			w.crawler.speedLogger.NewPriorityQueue++
 		} else {
 			if !found {
 				w.Queue.Push(item)
-				w.crawler.speedLogger.NewQueue++
 			} else {
 				w.LowPriorityQueue.Push(item)
-				w.crawler.speedLogger.NewLowPriorityQueue++
 			}
 		}
 	}

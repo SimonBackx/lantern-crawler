@@ -11,18 +11,19 @@ import (
 )
 
 type Tor struct {
-	Clients          *ClientList
-	AvailableDaemons int
+	Clients *ClientList
+	Count   int
+	Used    int
 }
 
 func NewTor() *Tor {
-	StartSocksPort := 9150
-	AvailableDaemons := 20
+	startSocksPort := 9150
+	availableDaemons := 20
 
-	daemonList := make([]*http.Client, AvailableDaemons)
-	for i := 0; i < AvailableDaemons; i++ {
-		addr := fmt.Sprintf("%v", StartSocksPort+i)
-		addr2 := fmt.Sprintf("%v", StartSocksPort+i+AvailableDaemons)
+	Clients := NewClientList()
+	for i := 0; i < availableDaemons; i++ {
+		addr := fmt.Sprintf("%v", startSocksPort+i)
+		addr2 := fmt.Sprintf("%v", startSocksPort+i+availableDaemons)
 		dir := fmt.Sprintf("/progress/tor_dir/tor%v", i)
 
 		run("mkdir", "-p", dir)
@@ -48,7 +49,7 @@ func NewTor() *Tor {
 
 		transport := &http.Transport{
 			Dial:         torDialer.Dial,
-			MaxIdleConns: 800,
+			MaxIdleConns: 1000,
 			//DisableKeepAlives: true, // Hmmm?
 			/*TLSHandshakeTimeout:   10 * time.Second,
 			  MaxIdleConnsPerHost:   0,
@@ -56,28 +57,48 @@ func NewTor() *Tor {
 			ResponseHeaderTimeout: 15 * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, // Onveilige https toelaten
 		}
-		daemonList[i] = &http.Client{
+		Clients.Push(&http.Client{
 			Transport: transport,
 			Timeout:   30 * time.Second,
-		}
+		})
 	}
 
-	Clients := NewClientList()
-	// Beschikbaarheid per proxy
-	for k := 0; k < 40; k++ {
-		for i := 0; i < AvailableDaemons; i++ {
-			Clients.Push(daemonList[i])
-		}
-	}
-	return &Tor{AvailableDaemons: AvailableDaemons, Clients: Clients}
+	return &Tor{Clients: Clients, Count: 300}
 }
 
 func (dist *Tor) GetClient() *http.Client {
-	return dist.Clients.Pop()
+	if dist.Used >= dist.Count {
+		return nil
+	}
+	dist.Used++
+
+	client := dist.Clients.Pop()
+	dist.Clients.Push(client)
+
+	return client
 }
 
 func (dist *Tor) FreeClient(client *http.Client) {
-	dist.Clients.Push(client)
+	dist.Used--
+}
+
+func (dist *Tor) DecreaseClients() {
+	if dist.Count < 10 {
+		return
+	}
+	dist.Count = int(float64(dist.Count) * 0.8)
+}
+
+func (dist *Tor) IncreaseClients() {
+	dist.Count = int(float64(dist.Count) * 1.1)
+}
+
+func (dist *Tor) AvailableClients() int {
+	return dist.Count - dist.Used
+}
+
+func (dist *Tor) UsedClients() int {
+	return dist.Used
 }
 
 func run(command string, arguments ...string) error {

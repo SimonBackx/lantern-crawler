@@ -2,43 +2,22 @@ package crawler
 
 import (
 	"fmt"
+	"github.com/SimonBackx/lantern-crawler/queries"
 	"time"
 )
 
 type SpeedLogger struct {
-	Count                int
-	DownloadSize         int64
-	DownloadTime         time.Duration
-	UnavailableCount     int
-	SuccessfulRetryCount int
-
-	/// Amount of URL's that successfully recrawled
-	RecrawlCount int
-
-	/// Amount of new discovered URL's
-	NewURLsCount int
-
-	/// Amount of items added to the priority queue
-	NewPriorityQueue    int
-	NewQueue            int
-	NewLowPriorityQueue int
-	NewFailedQueue      int
-	Timeouts            int
-	/// Amount of items that switch to priority queue and were priviously on a lower
-	/// priority queue
-	SwitchesToPriority int
-
-	PoppedFromPriorityQueue    int
-	PoppedFromQueue            int
-	PoppedFromLowPriorityQueue int
-	PoppedFromFailedQueue      int
+	Count        int
+	DownloadSize int64
+	DownloadTime time.Duration
+	Timeouts     int
 
 	Ticker  *time.Ticker
 	Crawler *Crawler
 }
 
 func NewSpeedLogger() *SpeedLogger {
-	logger := &SpeedLogger{Count: 0, Ticker: time.NewTicker(10 * time.Second)}
+	logger := &SpeedLogger{Count: 0, Ticker: time.NewTicker(60 * time.Second)}
 	go logger.Run()
 	return logger
 }
@@ -50,65 +29,47 @@ func (logger *SpeedLogger) Run() {
 		if !ok {
 			return
 		}
-		/*if previousTime == nil {
-			previousTime = &ti
-			continue
-		}*/
 
-		//difference := ti.Sub(*previousTime)
-		var requests float64 = float64(logger.Count) / 10
-		var unavailable float64 = float64(logger.UnavailableCount) / 10
-		var sucretry float64 = float64(logger.SuccessfulRetryCount) / 10
+		var requests float64 = float64(logger.Count)
+		workers := logger.Crawler.distributor.UsedClients()
 
-		//previousTime = &ti
 		domains := len(logger.Crawler.Workers)
-		sleeping := logger.Crawler.SleepingCrawlers.Length()
-		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v REQ/s, %v unavailable/s, %v SUCCESSFUL RETRIES/S, %v domains, %v sleeping", requests, unavailable, sucretry, domains, sleeping))
+		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v requests, %v workers, %v domains", requests/60, workers, domains))
 
-		if logger.Count > 0 && logger.DownloadTime.Seconds() > 0 {
-			logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v KB/s, %v KB/s/request, average page size: %vKB, average download time: %vms",
-				float64(logger.DownloadSize)/1000/10,
-				float64(logger.DownloadSize)/1000/logger.DownloadTime.Seconds(),
-				float64(logger.DownloadSize)/1000/float64(logger.Count),
-				logger.DownloadTime.Seconds()*1000/float64(logger.Count)),
-			)
+		downloadSpeed := int(float64(logger.DownloadSize) / 60000)
+		downloadSize := 0
+		downloadTime := 0
+
+		if logger.Count > 0 {
+			downloadSize = int(float64(logger.DownloadSize) / 1000 / float64(logger.Count))
+			downloadTime = int(logger.DownloadTime.Seconds() * 1000 / float64(logger.Count))
+
+			logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v KB/s, %v KB/page, %v ms/page, %v timeouts",
+				downloadSpeed,
+				downloadSize,
+				downloadTime,
+				logger.Timeouts,
+			))
 		}
 
-		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v NEW URL's, %v RECRAWLS, %v TIMEOUTS", logger.NewURLsCount, logger.RecrawlCount, logger.Timeouts))
-		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("Priority Queue		+%v	-%v excl. %v switches", logger.NewPriorityQueue, logger.PoppedFromPriorityQueue, logger.SwitchesToPriority))
-		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("Queue			+%v	-%v", logger.NewQueue, logger.PoppedFromQueue))
-		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("Low-priority Queue	+%v	-%v", logger.NewLowPriorityQueue, logger.PoppedFromLowPriorityQueue))
-		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("Failed Queue 		+%v	-%v", logger.NewFailedQueue, logger.PoppedFromFailedQueue))
-
 		// Als er veel timeouts zijn -> vertragen
-		if logger.Timeouts > 10 && logger.Crawler.distributor.AvailableClients() >= 0 {
+		if logger.Timeouts > 60 && logger.Crawler.distributor.AvailableClients() >= 0 {
 			logger.Crawler.distributor.DecreaseClients()
 		}
 
-		if logger.Timeouts == 0 && logger.Count < 1000 && logger.Crawler.distributor.AvailableClients() == 0 {
+		if logger.Timeouts < 20 && logger.Crawler.distributor.AvailableClients() == 0 {
 			logger.Crawler.distributor.IncreaseClients()
 		}
+
+		stats := queries.NewStats(logger.Count, logger.Timeouts, workers, domains, downloadSpeed, downloadTime, downloadSize)
+		logger.Crawler.ApiController.SaveStats(stats)
 
 		logger.Count = 0
 		logger.DownloadSize = 0
 		logger.DownloadTime = 0
 
 		logger.Timeouts = 0
-		logger.UnavailableCount = 0
-		logger.SuccessfulRetryCount = 0
 
-		logger.RecrawlCount = 0
-		logger.NewURLsCount = 0
-		logger.NewPriorityQueue = 0
-		logger.NewQueue = 0
-		logger.NewLowPriorityQueue = 0
-		logger.NewFailedQueue = 0
-
-		logger.SwitchesToPriority = 0
-		logger.PoppedFromPriorityQueue = 0
-		logger.PoppedFromQueue = 0
-		logger.PoppedFromLowPriorityQueue = 0
-		logger.PoppedFromFailedQueue = 0
 	}
 }
 
@@ -118,10 +79,6 @@ func (logger *SpeedLogger) Log(duration time.Duration, bytes int64) {
 	logger.DownloadTime += duration
 }
 
-func (logger *SpeedLogger) LogSuccessfulRetry() {
-	logger.SuccessfulRetryCount++
-}
-
-func (logger *SpeedLogger) LogUnavailable() {
-	logger.UnavailableCount++
+func (logger *SpeedLogger) LogTimeout() {
+	logger.Timeouts++
 }

@@ -29,6 +29,15 @@ func NewApiController() *ApiController {
 	return &ApiController{url: "http://localhost:8080/api", client: client}
 }
 
+func (a *ApiController) SaveStats(stats *queries.Stats) error {
+	jsonString, err := json.Marshal(stats)
+	if err != nil {
+		return err
+	}
+	_, err = a.newRequest("POST", "/stats", bytes.NewReader(jsonString))
+	return err
+}
+
 func (a *ApiController) SaveResult(result *queries.Result) error {
 	jsonString, err := json.Marshal(result)
 	if err != nil {
@@ -53,8 +62,6 @@ func (a *ApiController) GetQueries() ([]queries.Query, error) {
 }
 
 func (a *ApiController) newRequest(method, url string, reader io.Reader) ([]byte, error) {
-	fmt.Printf("%s %s\n", method, url)
-
 	key := "wQMXWVm4Yab_SKRISvmbWtbWmuMwud7oVRA0JUYThNAYDN8XS8KG4I0uOAOhRUB43rGtbn4VOhyVds-OIseAHwDOUpex0aESRHXz03jbOdSvLRQN-_qTFYqvcU3paXFAEXMz48a7VlB"
 	user := "crawler"
 
@@ -69,8 +76,6 @@ func (a *ApiController) newRequest(method, url string, reader io.Reader) ([]byte
 			if err != nil {
 				return nil, err
 			}
-
-			fmt.Printf("Response %s %s %s\n", method, url, response.Status)
 
 			// Yay! Response :D
 			if response.StatusCode >= 200 && response.StatusCode < 300 {

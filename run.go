@@ -16,7 +16,7 @@ func run(quit chan bool, finished chan bool) {
 		OnlyOnion:     false,
 		LoadFromFiles: false,
 		SaveToFiles:   false,
-		MaxDomains:    10000,
+		//MaxDomains:    10000,
 
 		LogRecrawlingEnabled: false,
 		LogGoroutinesEnabled: false,
