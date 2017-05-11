@@ -5,8 +5,7 @@ import (
 )
 
 type WorkerResult struct {
-	Links  []*url.URL
-	Source *url.URL
+	Links []*url.URL
 }
 
 func NewWorkerResult() *WorkerResult {

@@ -259,7 +259,7 @@ func (w *Hostworker) Run(client *http.Client) {
 	if w.SucceededDownloads == 0 {
 		w.sleepAfter = rand.Intn(5) + 1
 	} else {
-		w.sleepAfter = rand.Intn(20) + 6
+		w.sleepAfter = rand.Intn(40) + 6
 	}
 
 	for {
@@ -278,7 +278,7 @@ func (w *Hostworker) Run(client *http.Client) {
 			}
 
 			// Onderstaande kansverdeling moet nog minder uniform gemaakt worden
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(3000)+4000))
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(3000)+5000))
 
 			w.RequestStarted(item)
 			w.Request(item)
@@ -351,7 +351,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			b, err := readFirstBytes(response.Body)
 			if err != nil {
 				// Er ging iets mis
-				w.crawler.cfg.LogError(err)
+				//w.crawler.cfg.LogError(err)
 				w.RequestFailed(item)
 				return
 			}
@@ -391,19 +391,21 @@ func (w *Hostworker) Request(item *CrawlItem) {
 
 				// Even negeren
 				w.FailStreak--
-			} else if strings.Contains(str, "(Client.Timeout exceeded while awaiting headers)") {
+			} else if strings.Contains(str, "Client.Timeout") {
 				w.crawler.speedLogger.Timeouts++
-			} else if strings.Contains(str, "timeout awaiting response headers") {
+			} else if strings.Contains(str, "timeout") {
 				w.crawler.speedLogger.Timeouts++
 			} else if strings.Contains(str, "stopped after 10 redirects") {
-				item.Ignore = true
+				w.RequestIgnored(item)
+				return
 			} else if strings.Contains(str, "server gave HTTP response to HTTPS client") {
 				w.Scheme = "http"
+				item.URL.Scheme = "http"
 			} else if strings.Contains(str, "context canceled") {
 				// Negeer failcount bij handmatige cancel
 				item.FailCount--
 			} else {
-				w.crawler.cfg.LogError(err)
+				//w.crawler.cfg.LogError(err)
 			}
 
 			w.RequestFailed(item)
@@ -424,59 +426,50 @@ func (w *Hostworker) Request(item *CrawlItem) {
 }
 
 func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, reader io.Reader) bool {
-	// todo: redirect detecteren en aanpassingen maken hieraan
-
-	if response.Request.URL.Scheme == "https" {
-		if w.Scheme != "https" {
-			w.crawler.cfg.LogInfo(w.String()+" switched to https")
-		}
-		w.Scheme = "https"
-	} else if response.Request.URL.Scheme == "http" {
-		if w.Scheme == "https" {
-			w.crawler.cfg.LogInfo(w.String()+" downgraded to http")
-		}
-		w.Scheme = "http"
-	}
-
-	requestUrl := *response.Request.URL
-	urlRef := &requestUrl
-
-	// Todo: detect domain changed + update item url
-
 	// Doorgeven aan parser
 	result, err := Parse(reader, w.crawler.Queries)
 
 	if err != nil {
 		if err.Error() == "Reader reached maximum bytes!" {
-			w.crawler.cfg.LogError(err)
-			item.Ignore = true
+			w.RequestIgnored(item)
+			return false
 		}
 
 		w.RequestFailed(item)
 		return false
 	}
 
-	host := w.String()
-	urlString := requestUrl.RequestURI()
+	if response.Request.URL.Scheme == "https" {
+		w.Scheme = "https"
+	} else if response.Request.URL.Scheme == "http" {
+		w.Scheme = "http"
+	}
 
-	for _, apiResult := range result.Results {
-		apiResult.Host = &host
-		apiResult.Url = &urlString
-		if apiResult.Title == nil {
-			apiResult.Title = &host
+	item.URL = response.Request.URL
+
+	// Save results
+	if len(result.Results) > 0 {
+		host := w.String()
+		urlString := item.URL.String()
+
+		for _, apiResult := range result.Results {
+			apiResult.Host = &host
+			apiResult.Url = &urlString
+			if apiResult.Title == nil {
+				apiResult.Title = &host
+			}
+
+			w.crawler.cfg.LogInfo("Found " + *apiResult.Snippet + " at " + w.String() + item.String())
+			w.crawler.ApiController.SaveResult(apiResult)
 		}
-
-		w.crawler.cfg.LogInfo("Found " + *apiResult.Snippet + " at " + w.String() + item.String())
-		w.crawler.ApiController.SaveResult(apiResult)
 	}
 
 	workerResult := NewWorkerResult()
-	workerResult.Source = urlRef
 
 	if result.Links != nil {
 		for _, link := range result.Links {
 			// Convert links to absolute url
-			u := urlRef.ResolveReference(&link.Href)
+			u := response.Request.URL.ResolveReference(&link.Href)
 
 			// Url moet absoluut zijn
 			if u == nil || !u.IsAbs() {
@@ -543,13 +536,25 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 				}
 			}
 
-			if u.Hostname() == w.Host {
+			if w.crawler.GetDomainForUrl(u) == w.Host {
 				// Interne URL's meteen verwerken
 				w.NewReference(u, item, true)
 			} else {
 				workerResult.Append(u)
 			}
 		}
+	}
+
+	// Kritieke move operatie uitvoeren noodzakelijk?
+	if w.crawler.GetDomainForUrl(item.URL) != w.Host {
+		// Negeren vanaf nu voor deze worker
+		w.RequestIgnored(item)
+
+		// Doorgeven aan crawler en aan juiste worker bezorgen voor verdere afhandeling?
+		workerResult.Append(item.URL)
+		w.crawler.WorkerResult <- workerResult
+
+		return false
 	}
 
 	// Resultaat doorgeven aan Crawler
@@ -582,7 +587,9 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 			// Crawler verwittigen zodat we op de recrawl lijst komen
 			w.crawler.WorkerIntroduction <- w
 		} else {
-			w.IntroductionPoints.Push(item)
+			if w.IntroductionPoints.Length < 10 {
+				w.IntroductionPoints.Push(item)
+			}
 		}
 	}
 
@@ -616,8 +623,6 @@ func (w *Hostworker) RequestFailed(item *CrawlItem) {
 			// Meteen stoppen
 			w.sleepAfter = -1
 
-			// Terug http proberen voor moest https toch niet meer kloppen
-			w.Scheme = "http"
 			w.crawler.cfg.LogInfo("Failstreak voor " + w.String())
 		}
 	}

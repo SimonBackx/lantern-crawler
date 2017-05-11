@@ -143,7 +143,7 @@ func (crawler *Crawler) GetDomainForUrl(u *url.URL) string {
 	}
 }
 
-func (crawler *Crawler) ProcessUrl(u *url.URL, source *url.URL) {
+func (crawler *Crawler) ProcessUrl(u *url.URL) {
 	host := crawler.GetDomainForUrl(u)
 	worker := crawler.Workers[host]
 
@@ -367,7 +367,7 @@ func (crawler *Crawler) Start(signal chan int) {
 
 			// 1. URL's
 			for _, url := range result.Links {
-				crawler.ProcessUrl(url, result.Source)
+				crawler.ProcessUrl(url)
 			}
 
 			// 2. Andere data (voor later)

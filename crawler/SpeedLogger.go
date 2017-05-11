@@ -66,7 +66,12 @@ func (logger *SpeedLogger) Run() {
 		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v REQ/s, %v unavailable/s, %v SUCCESSFUL RETRIES/S, %v domains, %v sleeping", requests, unavailable, sucretry, domains, sleeping))
 
 		if logger.Count > 0 && logger.DownloadTime.Seconds() > 0 {
-			logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v KB/s, average page size: %vKB, average download time: %vms", float64(logger.DownloadSize)/1000/logger.DownloadTime.Seconds(), float64(logger.DownloadSize)/1000/float64(logger.Count), logger.DownloadTime.Seconds()*1000/float64(logger.Count)))
+			logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v KB/s, %v KB/s/request, average page size: %vKB, average download time: %vms",
+				float64(logger.DownloadSize)/1000/10,
+				float64(logger.DownloadSize)/1000/logger.DownloadTime.Seconds(),
+				float64(logger.DownloadSize)/1000/float64(logger.Count),
+				logger.DownloadTime.Seconds()*1000/float64(logger.Count)),
+			)
 		}
 
 		logger.Crawler.cfg.Log("STATS", fmt.Sprintf("%v NEW URL's, %v RECRAWLS, %v TIMEOUTS", logger.NewURLsCount, logger.RecrawlCount, logger.Timeouts))

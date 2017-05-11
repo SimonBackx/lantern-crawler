@@ -6,9 +6,10 @@ import (
 )
 
 type CrawlQueue struct {
-	First *CrawlItem
-	Last  *CrawlItem
-	Name  string
+	First  *CrawlItem
+	Last   *CrawlItem
+	Length int
+	Name   string
 }
 
 func (q *CrawlQueue) ReadFromReader(reader *bufio.Reader) {
@@ -52,6 +53,7 @@ func (queue *CrawlQueue) Clear() {
 
 	queue.First = nil
 	queue.Last = nil
+	queue.Length = 0
 }
 
 func (queue *CrawlQueue) Pop() *CrawlItem {
@@ -75,6 +77,7 @@ func (queue *CrawlQueue) Pop() *CrawlItem {
 	// Previous op nil zetten is niet nodig, dat is al zo als het item eerst in de queue staat
 	item.Queue = nil
 
+	queue.Length--
 	return item
 }
 
@@ -86,6 +89,7 @@ func (queue *CrawlQueue) Push(item *CrawlItem) {
 	item.Queue = queue
 	item.Next = nil
 	item.Previous = nil
+	queue.Length++
 
 	if queue.First == nil {
 		// Eerst in de queue zetten
@@ -136,6 +140,7 @@ func (queue *CrawlQueue) Remove(item *CrawlItem) {
 	item.Next = nil
 	item.Previous = nil
 	item.Queue = nil
+	queue.Length--
 }
 
 func (queue *CrawlQueue) String() string {
@@ -166,9 +171,11 @@ func (queue *CrawlQueue) Merge(q *CrawlQueue) {
 	if queue.First == nil {
 		queue.First = q.First
 		queue.Last = q.Last
+		queue.Length = q.Length
 		return
 	}
 
+	queue.Length += q.Length
 	queue.Last.Next = q.First
 
 	if q.First != nil {
