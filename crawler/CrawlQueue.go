@@ -35,6 +35,29 @@ func (q *CrawlQueue) SaveToWriter(writer *bufio.Writer) {
 	}
 }
 
+func (q *CrawlQueue) IsEqual(b *CrawlQueue) bool {
+	if q.Length != b.Length {
+		return false
+	}
+	if q.IsEmpty() && b.IsEmpty() {
+		return true
+	}
+
+	item1 := q.First
+	item2 := b.First
+
+	for item1 != nil && item2 != nil {
+		if !item1.IsEqual(item2) {
+			return false
+		}
+
+		item1 = item1.Next
+		item2 = item2.Next
+	}
+
+	return true
+}
+
 func NewCrawlQueue(name string) *CrawlQueue {
 	return &CrawlQueue{Name: name}
 }

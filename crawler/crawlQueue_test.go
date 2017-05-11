@@ -1,9 +1,62 @@
 package crawler
 
 import (
+	"bufio"
+	"bytes"
 	"net/url"
+	"strings"
 	"testing"
+	"time"
 )
+
+func TestCrawlQueueSaving(test *testing.T) {
+	u, _ := url.Parse("https://www.test.com/websitepage")
+	item := NewCrawlItem(u)
+	item.Depth = 23
+	item.Cycle = 978655
+	item.FailCount = 3
+	now := time.Now()
+
+	item.LastDownloadStarted = &now
+	item.LastDownload = &now
+
+	queue := NewCrawlQueue("Test")
+	queue.Push(item)
+
+	u, _ = url.Parse("https://www.test.com/websitepage2")
+	item = NewCrawlItem(u)
+	item.Depth = 23
+	item.Cycle = 978655
+	item.FailCount = 3
+	queue.Push(item)
+
+	u, _ = url.Parse("https://www.test.com/websitepage3")
+	item = NewCrawlItem(u)
+	item.Depth = 2
+	item.Cycle = 97
+	item.FailCount = 0
+	item.LastDownloadStarted = &now
+	item.LastDownload = &now
+	queue.Push(item)
+
+	buffer := bytes.NewBufferString("")
+	w := bufio.NewWriter(buffer)
+	queue.SaveToWriter(w)
+	w.Flush()
+	str := buffer.String()
+
+	queueCopy := NewCrawlQueue("Test")
+	queueCopy.ReadFromReader(bufio.NewReader(strings.NewReader(str)))
+
+	if !queue.IsEqual(queueCopy) {
+		test.Log("Save not equal")
+		test.Log(str)
+		queue.PrintQueue()
+		queueCopy.PrintQueue()
+		test.Fail()
+	}
+
+}
 
 func TestCrawlQueue(test *testing.T) {
 	u, _ := url.Parse("https://www.test.com/hello")

@@ -61,7 +61,7 @@ func (c *CrawlItem) IsEqual(b *CrawlItem) bool {
 		return false
 	}
 
-	if c.LastDownload.Equal(*b.LastDownload) {
+	if !(c.LastDownload == nil && b.LastDownload == nil) && (c.LastDownload == nil || b.LastDownload == nil || c.LastDownload.Equal(*b.LastDownload)) {
 		return false
 	}
 
