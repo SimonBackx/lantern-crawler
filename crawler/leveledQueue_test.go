@@ -6,7 +6,7 @@ import (
 )
 
 func TestLeveledQueue(test *testing.T) {
-	u, _ := url.Parse("/hello")
+	u, _ := url.Parse("https://www.test.com/hello")
 	queue := NewLeveledQueue()
 	item1 := NewCrawlItem(u)
 	item2 := NewCrawlItem(u)

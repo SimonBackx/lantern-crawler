@@ -53,7 +53,7 @@ func (logger *SpeedLogger) Run() {
 		}
 
 		// Als er veel timeouts zijn -> vertragen
-		if logger.Timeouts > 60 && logger.Crawler.distributor.AvailableClients() >= 0 {
+		if logger.Timeouts > 50 && logger.Crawler.distributor.AvailableClients() >= 0 {
 			logger.Crawler.distributor.DecreaseClients()
 		}
 

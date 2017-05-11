@@ -9,7 +9,7 @@ func TestWorkerDepth(test *testing.T) {
 	crawler := NewCrawler(&CrawlerConfig{Testing: true})
 	worker1 := NewHostworker("host1", crawler)
 
-	u, err := url.Parse("/root/")
+	u, err := url.Parse("http://www.test.com")
 	if err != nil {
 		test.Fatal(err)
 		return
@@ -25,6 +25,8 @@ func TestWorkerDepth(test *testing.T) {
 
 	if root.URL.String() != strBefore || u.String() != strBefore {
 		test.Log("NewReference changed url")
+		test.Log(strBefore)
+		test.Log(root.URL.String())
 		test.Fail()
 	}
 
@@ -47,8 +49,8 @@ func TestWorkerDepth(test *testing.T) {
 	}
 
 	// Deze urls vinden we terug op elke pagina (samen met root)
-	url1, _ := url.Parse("/contact/")
-	url2, _ := url.Parse("/info/")
+	url1, _ := u.Parse("/contact/")
+	url2, _ := u.Parse("/info/")
 
 	// Nieuwe pagina's
 

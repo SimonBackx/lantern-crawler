@@ -7,7 +7,7 @@ import (
 )
 
 func TestCrawlItem(test *testing.T) {
-	u, _ := url.Parse("/websitepage")
+	u, _ := url.Parse("https://www.test.com/websitepage")
 	item := NewCrawlItem(u)
 	item.Depth = 23
 	item.Cycle = 978655
