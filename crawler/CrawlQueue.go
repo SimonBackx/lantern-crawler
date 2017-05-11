@@ -24,6 +24,7 @@ func (q *CrawlQueue) ReadFromReader(reader *bufio.Reader) {
 		}
 		line, _, _ = reader.ReadLine()
 	}
+	// Leest laatste lege lijn ook in
 }
 
 func (q *CrawlQueue) SaveToWriter(writer *bufio.Writer) {
@@ -33,6 +34,7 @@ func (q *CrawlQueue) SaveToWriter(writer *bufio.Writer) {
 		writer.WriteString("\n")
 		item = item.Next
 	}
+	writer.WriteString("\n")
 }
 
 func (q *CrawlQueue) IsEqual(b *CrawlQueue) bool {

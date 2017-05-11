@@ -62,6 +62,5 @@ func (l *LeveledQueue) ReadFromReader(reader *bufio.Reader) {
 func (l *LeveledQueue) SaveToWriter(writer *bufio.Writer) {
 	for _, queue := range l.Levels {
 		queue.SaveToWriter(writer)
-		writer.WriteString("\n")
 	}
 }

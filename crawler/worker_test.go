@@ -1,7 +1,11 @@
 package crawler
 
 import (
+	"bufio"
+	"bytes"
+	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -207,9 +211,62 @@ func TestWorkerDepth(test *testing.T) {
 		}
 	}
 
+	//fmt.Printf("Depth %v, cycle %v\n", next.Depth, next.Cycle)
+	urlInvalid, _ := u.Parse("/invalid_url/")
+
+	invalidItem, _ := worker1.NewReference(urlInvalid, nil, false)
+	invalidItem.Remove()
+	worker1.RequestStarted(invalidItem)
+	worker1.RequestFailed(invalidItem)
+
+	invalidItem.Remove()
+	worker1.RequestStarted(invalidItem)
+	worker1.RequestFailed(invalidItem)
+
+	invalidItem.Remove()
+	worker1.RequestStarted(invalidItem)
+	worker1.RequestFailed(invalidItem)
+
+	invalidItem.Remove()
+	worker1.RequestStarted(invalidItem)
+	worker1.RequestFailed(invalidItem)
+
+	urlInvalid2, _ := u.Parse("/invalid_url2/")
+
+	invalidItem2, _ := worker1.NewReference(urlInvalid2, nil, false)
+	invalidItem2.Remove()
+	worker1.RequestStarted(invalidItem2)
+	worker1.RequestFailed(invalidItem2)
+
+	invalidItem2.Remove()
+	worker1.RequestStarted(invalidItem2)
+	worker1.RequestFailed(invalidItem2)
+
+	urlInvalid3, _ := u.Parse("/invalid_url3/")
+	invalidItem3, _ := worker1.NewReference(urlInvalid3, nil, false)
+	invalidItem3.Remove()
+	worker1.RequestStarted(invalidItem3)
+	worker1.RequestFailed(invalidItem3)
+
+	// todo: test deze fails
+
 	// We veranderen het nu zodanig dat de contact pagian
 	// niet meer bereikbaar is vanaf de startpagina, maar wel nog
 	// steeds vanaf de andere pagina's. Hierdoor moet de diepte van die
 	// pagina aangepast worden naar 2
+	buffer := bytes.NewBufferString("")
+	w := bufio.NewWriter(buffer)
+	worker1.SaveToWriter(w)
+	w.Flush()
+	str := buffer.String()
 
+	workerCopy := NewHostworker("", crawler)
+	workerCopy.ReadFromReader(bufio.NewReader(strings.NewReader(str)))
+
+	if !worker1.IsEqual(workerCopy) {
+		test.Log("Saving worker failed")
+		test.Fail()
+	}
+
+	fmt.Printf("%v KB saved", len(str)/1024)
 }
