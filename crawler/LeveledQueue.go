@@ -42,8 +42,26 @@ func (r *LeveledQueue) First() *CrawlItem {
 	return nil
 }
 
+func (l *LeveledQueue) IsEqual(b *LeveledQueue) bool {
+	for i := 0; i <= maxFailCount; i++ {
+		if !l.Levels[i].IsEqual(b.Levels[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (l *LeveledQueue) ReadFromReader(reader *bufio.Reader) {
+	for i := 0; i <= maxFailCount; i++ {
+		queue := NewCrawlQueue("Leveled queue")
+		queue.ReadFromReader(reader)
+		l.Levels[i] = queue
+	}
+}
+
 func (l *LeveledQueue) SaveToWriter(writer *bufio.Writer) {
 	for _, queue := range l.Levels {
 		queue.SaveToWriter(writer)
+		writer.WriteString("\n")
 	}
 }
