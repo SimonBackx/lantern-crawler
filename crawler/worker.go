@@ -97,180 +97,6 @@ func (w *Hostworker) SaveToFile() {
 	writer.Flush()
 }
 
-func (w *Hostworker) ReadFromReader(reader *bufio.Reader) {
-	// Eerst de basis gegevens:
-	line, _, _ := reader.ReadLine()
-	if len(line) == 0 {
-		return
-	}
-	str := string(line)
-	parts := strings.Split(str, "	")
-	if len(parts) != 5 {
-		return
-	}
-
-	w.Host = parts[0]
-	w.Scheme = parts[1]
-
-	num, err := strconv.Atoi(parts[2])
-	if err != nil {
-		fmt.Println("Invalid failstreak")
-		return
-	}
-	w.FailStreak = num
-
-	num, err = strconv.Atoi(parts[3])
-	if err != nil {
-		fmt.Println("Invalid SucceededDownloads")
-		return
-	}
-	w.SucceededDownloads = num
-
-	num, err = strconv.Atoi(parts[4])
-	if err != nil {
-		fmt.Println("Invalid LatestCycle")
-		return
-	}
-	w.LatestCycle = num
-
-	w.IntroductionPoints.ReadFromReader(reader)
-	w.PriorityQueue.ReadFromReader(reader)
-	w.Queue.ReadFromReader(reader)
-	w.LowPriorityQueue.ReadFromReader(reader)
-	w.FailedQueue.ReadFromReader(reader)
-
-	line, _, _ = reader.ReadLine()
-	for len(line) > 0 {
-		str = string(line)
-		item := NewCrawlItemFromString(&str)
-		if item != nil {
-			w.VisitedItem(item)
-		} else {
-			fmt.Println("Invalid item: " + str)
-		}
-		line, _, _ = reader.ReadLine()
-	}
-
-	// Alle queue's toevoegen aan already visited
-	var item *CrawlItem
-	item = w.IntroductionPoints.First
-	for item != nil {
-		w.VisitedItem(item)
-		item = item.Next
-	}
-	item = w.PriorityQueue.First
-	for item != nil {
-		w.VisitedItem(item)
-		item = item.Next
-	}
-	item = w.Queue.First
-	for item != nil {
-		w.VisitedItem(item)
-		item = item.Next
-	}
-	item = w.LowPriorityQueue.First
-	for item != nil {
-		w.VisitedItem(item)
-		item = item.Next
-	}
-
-	for _, queue := range w.FailedQueue.Levels {
-		item = queue.First
-		for item != nil {
-			w.VisitedItem(item)
-			item = item.Next
-		}
-	}
-
-}
-
-func (w *Hostworker) SaveToWriter(writer *bufio.Writer) {
-	str := fmt.Sprintf(
-		"%s	%s	%v	%v	%v",
-		w.Host,
-		w.Scheme,
-		w.FailStreak,
-		w.SucceededDownloads,
-		w.LatestCycle,
-	)
-	writer.WriteString(str)
-	writer.WriteString("\n")
-
-	w.IntroductionPoints.SaveToWriter(writer)
-	w.PriorityQueue.SaveToWriter(writer)
-	w.Queue.SaveToWriter(writer)
-	w.LowPriorityQueue.SaveToWriter(writer)
-	w.FailedQueue.SaveToWriter(writer)
-
-	// Nu de rest opslaan
-	for _, value := range w.AlreadyVisited {
-		if value.Queue == nil {
-			// Staat in geen andere queue
-			writer.WriteString(value.SaveToString())
-			writer.WriteString("\n")
-		}
-	}
-}
-
-func (w *Hostworker) IsEqual(b *Hostworker) bool {
-	if w.Host != b.Host {
-		return false
-	}
-
-	if w.Scheme != b.Scheme {
-		return false
-	}
-
-	if w.FailStreak != b.FailStreak {
-		return false
-	}
-
-	if w.SucceededDownloads != b.SucceededDownloads {
-		return false
-	}
-
-	if w.LatestCycle != b.LatestCycle {
-		return false
-	}
-
-	if !w.IntroductionPoints.IsEqual(b.IntroductionPoints) {
-		return false
-	}
-
-	if !w.PriorityQueue.IsEqual(b.PriorityQueue) {
-		return false
-	}
-
-	if !w.Queue.IsEqual(b.Queue) {
-		return false
-	}
-
-	if !w.LowPriorityQueue.IsEqual(b.LowPriorityQueue) {
-		return false
-	}
-
-	if !w.FailedQueue.IsEqual(b.FailedQueue) {
-		return false
-	}
-
-	// todo: already visited checken!
-	if len(w.AlreadyVisited) != len(b.AlreadyVisited) {
-		return false
-	}
-
-	for key, value := range w.AlreadyVisited {
-		other, found := b.AlreadyVisited[key]
-		if !found {
-			return false
-		}
-		if !value.IsEqual(other) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func NewHostWorkerFromFile(file *os.File, crawler *Crawler) *Hostworker {
 	reader := bufio.NewReader(file)
 	w := NewHostworker("", crawler)
@@ -903,4 +729,184 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 	}
 
 	return item, nil
+}
+
+//
+//
+// Saving functions
+//
+//
+
+func (w *Hostworker) ReadFromReader(reader *bufio.Reader) {
+	// Eerst de basis gegevens:
+	line, _, _ := reader.ReadLine()
+	if len(line) == 0 {
+		return
+	}
+	str := string(line)
+	parts := strings.Split(str, "	")
+	if len(parts) != 5 {
+		return
+	}
+
+	w.Host = parts[0]
+	w.Scheme = parts[1]
+
+	num, err := strconv.Atoi(parts[2])
+	if err != nil {
+		fmt.Println("Invalid failstreak")
+		return
+	}
+	w.FailStreak = num
+
+	num, err = strconv.Atoi(parts[3])
+	if err != nil {
+		fmt.Println("Invalid SucceededDownloads")
+		return
+	}
+	w.SucceededDownloads = num
+
+	num, err = strconv.Atoi(parts[4])
+	if err != nil {
+		fmt.Println("Invalid LatestCycle")
+		return
+	}
+	w.LatestCycle = num
+
+	w.IntroductionPoints.ReadFromReader(reader)
+	w.PriorityQueue.ReadFromReader(reader)
+	w.Queue.ReadFromReader(reader)
+	w.LowPriorityQueue.ReadFromReader(reader)
+	w.FailedQueue.ReadFromReader(reader)
+
+	line, _, _ = reader.ReadLine()
+	for len(line) > 0 {
+		str = string(line)
+		item := NewCrawlItemFromString(&str)
+		if item != nil {
+			w.VisitedItem(item)
+		} else {
+			fmt.Println("Invalid item: " + str)
+		}
+		line, _, _ = reader.ReadLine()
+	}
+
+	// Alle queue's toevoegen aan already visited
+	var item *CrawlItem
+	item = w.IntroductionPoints.First
+	for item != nil {
+		w.VisitedItem(item)
+		item = item.Next
+	}
+	item = w.PriorityQueue.First
+	for item != nil {
+		w.VisitedItem(item)
+		item = item.Next
+	}
+	item = w.Queue.First
+	for item != nil {
+		w.VisitedItem(item)
+		item = item.Next
+	}
+	item = w.LowPriorityQueue.First
+	for item != nil {
+		w.VisitedItem(item)
+		item = item.Next
+	}
+
+	for _, queue := range w.FailedQueue.Levels {
+		item = queue.First
+		for item != nil {
+			w.VisitedItem(item)
+			item = item.Next
+		}
+	}
+
+}
+
+func (w *Hostworker) SaveToWriter(writer *bufio.Writer) {
+	str := fmt.Sprintf(
+		"%s	%s	%v	%v	%v",
+		w.Host,
+		w.Scheme,
+		w.FailStreak,
+		w.SucceededDownloads,
+		w.LatestCycle,
+	)
+	writer.WriteString(str)
+	writer.WriteString("\n")
+
+	w.IntroductionPoints.SaveToWriter(writer)
+	w.PriorityQueue.SaveToWriter(writer)
+	w.Queue.SaveToWriter(writer)
+	w.LowPriorityQueue.SaveToWriter(writer)
+	w.FailedQueue.SaveToWriter(writer)
+
+	// Nu de rest opslaan
+	for _, value := range w.AlreadyVisited {
+		if value.Queue == nil {
+			// Staat in geen andere queue
+			writer.WriteString(value.SaveToString())
+			writer.WriteString("\n")
+		}
+	}
+}
+
+func (w *Hostworker) IsEqual(b *Hostworker) bool {
+	if w.Host != b.Host {
+		return false
+	}
+
+	if w.Scheme != b.Scheme {
+		return false
+	}
+
+	if w.FailStreak != b.FailStreak {
+		return false
+	}
+
+	if w.SucceededDownloads != b.SucceededDownloads {
+		return false
+	}
+
+	if w.LatestCycle != b.LatestCycle {
+		return false
+	}
+
+	if !w.IntroductionPoints.IsEqual(b.IntroductionPoints) {
+		return false
+	}
+
+	if !w.PriorityQueue.IsEqual(b.PriorityQueue) {
+		return false
+	}
+
+	if !w.Queue.IsEqual(b.Queue) {
+		return false
+	}
+
+	if !w.LowPriorityQueue.IsEqual(b.LowPriorityQueue) {
+		return false
+	}
+
+	if !w.FailedQueue.IsEqual(b.FailedQueue) {
+		return false
+	}
+
+	// todo: already visited checken!
+	if len(w.AlreadyVisited) != len(b.AlreadyVisited) {
+		return false
+	}
+
+	for key, value := range w.AlreadyVisited {
+		other, found := b.AlreadyVisited[key]
+		if !found {
+			return false
+		}
+		if !value.IsEqual(other) {
+			return false
+		}
+	}
+
+	return true
 }
