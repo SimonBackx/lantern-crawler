@@ -79,6 +79,7 @@ func FindLinks(document *html.Node, result *ParseResult) {
 	for i, node := range selection {
 		attr := NodeAttr(node, "href")
 		if attr != nil {
+			// todo: begin en einde strippen (spaties en tabs!)
 			attrUrl, err := url.Parse(*attr)
 			if err == nil {
 				links[i-errorOffset] = &Link{attrUrl}

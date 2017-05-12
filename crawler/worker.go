@@ -596,6 +596,8 @@ func (w *Hostworker) GetNextRequest() *CrawlItem {
 }
 
 func cleanURLPath(u url.URL) (string, error) {
+	// todo!!!: verbruikt te veel geheugen
+	//
 	u.Scheme = "" // todo: checken?
 
 	normalized := purell.NormalizeURL(&u,
@@ -608,6 +610,7 @@ func cleanURLPath(u url.URL) (string, error) {
 			purell.FlagRemoveEmptyPortSeparator|
 			purell.FlagRemoveTrailingSlash)
 
+	// Allocatie vermijden???
 	clean, err := url.ParseRequestURI(normalized)
 
 	if err != nil {
