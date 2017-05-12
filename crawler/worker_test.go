@@ -19,16 +19,16 @@ func TestWorkerDepth(test *testing.T) {
 		test.Fatal(err)
 		return
 	}
+	strBefore := u.Path
 
-	strBefore := u.String()
-
-	root, err := worker1.NewReference(u, nil, false)
+	uCopy := *u
+	root, err := worker1.NewReference(&uCopy, nil, false)
 	if err != nil {
 		test.Fatal(err)
 		return
 	}
 
-	if root.URL.String() != strBefore || u.String() != strBefore {
+	if root.URL.Path != strBefore || uCopy.Path != strBefore {
 		test.Log("NewReference changed url")
 		test.Log(strBefore)
 		test.Log(root.URL.String())
@@ -41,7 +41,9 @@ func TestWorkerDepth(test *testing.T) {
 	}
 
 	// Wat als we het nog een keer vinden?
-	root2, _ := worker1.NewReference(u, nil, false)
+
+	uCopy = *u
+	root2, _ := worker1.NewReference(&uCopy, nil, false)
 	if root != root2 || root2.Depth != 0 {
 		test.Log("Introduction point duplication / depth not set correctly")
 		test.Fail()
@@ -68,16 +70,19 @@ func TestWorkerDepth(test *testing.T) {
 		i := 0
 		for next != nil {
 			worker1.RequestStarted(next)
+			originalNext := next.URL.String()
 
 			//fmt.Printf("Depth %v, cycle %v\n", next.Depth, next.Cycle)
-
-			root_copy, _ := worker1.NewReference(u, next, true)
+			uCopy1 := *u
+			root_copy, _ := worker1.NewReference(&uCopy1, next, true)
 
 			if next != root || recrawl == 0 {
-				contact_item, _ = worker1.NewReference(url1, next, true)
+				uCopy2 := *url1
+				contact_item, _ = worker1.NewReference(&uCopy2, next, true)
 			}
 
-			info_item, _ := worker1.NewReference(url2, next, true)
+			uCopy3 := *url2
+			info_item, _ := worker1.NewReference(&uCopy3, next, true)
 
 			if root_copy != root || root_copy.Depth != 0 {
 				test.Log("Depth / queue not set correctly for root")
@@ -122,11 +127,19 @@ func TestWorkerDepth(test *testing.T) {
 
 			}
 
+			if originalNext != next.URL.String() {
+				test.Logf("Next url did change from %v, to %v\n", originalNext, next.URL.String())
+				test.Fail()
+			}
+
 			if next.Depth < 15 {
 				url_page1, _ := url.Parse("page1/")
 				url_page2, _ := url.Parse("page2/")
-				url_page1_abs := next.URL.ResolveReference(url_page1)
-				url_page2_abs := next.URL.ResolveReference(url_page2)
+
+				uu := u.ResolveReference(next.URL)
+
+				url_page1_abs := uu.ResolveReference(url_page1)
+				url_page2_abs := uu.ResolveReference(url_page2)
 
 				page1, _ := worker1.NewReference(url_page1_abs, next, true)
 				page2, _ := worker1.NewReference(url_page2_abs, next, true)

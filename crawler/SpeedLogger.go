@@ -17,7 +17,7 @@ type SpeedLogger struct {
 }
 
 func NewSpeedLogger() *SpeedLogger {
-	logger := &SpeedLogger{Count: 0, Ticker: time.NewTicker(60 * time.Second)}
+	logger := &SpeedLogger{Count: 0, Ticker: time.NewTicker(10 * time.Second)}
 	go logger.Run()
 	return logger
 }
@@ -34,9 +34,9 @@ func (logger *SpeedLogger) Run() {
 		workers := logger.Crawler.distributor.UsedClients()
 
 		domains := len(logger.Crawler.Workers)
-		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v requests, %v workers, %v domains", requests/60, workers, domains))
+		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v requests, %v workers, %v domains", requests/10, workers, domains))
 
-		downloadSpeed := int(float64(logger.DownloadSize) / 60000)
+		downloadSpeed := int(float64(logger.DownloadSize) / 10000) // * 6
 		downloadSize := 0
 		downloadTime := 0
 

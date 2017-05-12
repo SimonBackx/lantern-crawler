@@ -9,7 +9,7 @@ import (
 )
 
 func TestLeveledQueueSaving(test *testing.T) {
-	u, _ := url.Parse("https://www.test.com/hello")
+	u, _ := url.Parse("hello")
 	queue := NewLeveledQueue()
 	item1 := NewCrawlItem(u)
 	item2 := NewCrawlItem(u)
@@ -39,7 +39,7 @@ func TestLeveledQueueSaving(test *testing.T) {
 	str := buffer.String()
 
 	queueCopy := NewLeveledQueue()
-	queueCopy.ReadFromReader(bufio.NewReader(strings.NewReader(str)))
+	queueCopy.ReadFromReader(bufio.NewReader(strings.NewReader(str)), nil)
 
 	if !queue.IsEqual(queueCopy) {
 		test.Log("Save not equal")
@@ -59,7 +59,7 @@ func TestLeveledQueueSaving(test *testing.T) {
 }
 
 func TestLeveledQueue(test *testing.T) {
-	u, _ := url.Parse("https://www.test.com/hello")
+	u, _ := url.Parse("hello")
 	queue := NewLeveledQueue()
 	item1 := NewCrawlItem(u)
 	item2 := NewCrawlItem(u)

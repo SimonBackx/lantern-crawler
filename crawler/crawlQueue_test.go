@@ -10,7 +10,7 @@ import (
 )
 
 func TestCrawlQueueSaving(test *testing.T) {
-	u, _ := url.Parse("https://www.test.com/websitepage")
+	u, _ := url.Parse("websitepage")
 	item := NewCrawlItem(u)
 	item.Depth = 23
 	item.Cycle = 978655
@@ -23,14 +23,14 @@ func TestCrawlQueueSaving(test *testing.T) {
 	queue := NewCrawlQueue("Test")
 	queue.Push(item)
 
-	u, _ = url.Parse("https://www.test.com/websitepage2")
+	u, _ = url.Parse("websitepage2")
 	item = NewCrawlItem(u)
 	item.Depth = 23
 	item.Cycle = 978655
 	item.FailCount = 3
 	queue.Push(item)
 
-	u, _ = url.Parse("https://www.test.com/websitepage3")
+	u, _ = url.Parse("websitepage3")
 	item = NewCrawlItem(u)
 	item.Depth = 2
 	item.Cycle = 97
@@ -46,7 +46,7 @@ func TestCrawlQueueSaving(test *testing.T) {
 	str := buffer.String()
 
 	queueCopy := NewCrawlQueue("Test")
-	queueCopy.ReadFromReader(bufio.NewReader(strings.NewReader(str)))
+	queueCopy.ReadFromReader(bufio.NewReader(strings.NewReader(str)), nil)
 
 	if !queue.IsEqual(queueCopy) {
 		test.Log("Save not equal")
@@ -59,7 +59,7 @@ func TestCrawlQueueSaving(test *testing.T) {
 }
 
 func TestCrawlQueue(test *testing.T) {
-	u, _ := url.Parse("https://www.test.com/hello")
+	u, _ := url.Parse("hello")
 	queue := NewCrawlQueue("test")
 	item1 := NewCrawlItem(u)
 	item2 := NewCrawlItem(u)

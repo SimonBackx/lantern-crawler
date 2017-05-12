@@ -30,6 +30,8 @@ type CrawlItem struct {
 	Next     *CrawlItem
 	Previous *CrawlItem
 	Queue    *CrawlQueue
+
+	Subdomain *Subdomain
 }
 
 func (c *CrawlItem) IsEqual(b *CrawlItem) bool {
@@ -65,25 +67,29 @@ func (c *CrawlItem) IsEqual(b *CrawlItem) bool {
 		return false
 	}
 
+	if !(c.Subdomain == nil && b.Subdomain == nil) && (c.Subdomain == nil || b.Subdomain == nil || c.Subdomain.Url.String() != b.Subdomain.Url.String()) {
+		return false
+	}
+
 	return true
 }
 
 func NewCrawlItem(URL *url.URL) *CrawlItem {
-	if !URL.IsAbs() {
-		panic("Not absolute crawl item " + URL.String())
+	if URL.IsAbs() {
+		panic("Is absolute crawl item " + URL.String())
 	}
 	return &CrawlItem{URL: URL}
 }
 
-func NewCrawlItemFromString(str *string) *CrawlItem {
+func NewCrawlItemFromString(str *string, subdomains []*Subdomain) *CrawlItem {
 	parts := strings.Split(*str, "	")
-	if len(parts) != 7 {
+	if len(parts) != 8 {
 		fmt.Println("Ongeldig aantal tabs")
 		return nil
 	}
 
-	url, err := url.ParseRequestURI(parts[0])
-	if err != nil {
+	u, err := url.Parse(parts[0])
+	if err != nil || u.IsAbs() {
 		fmt.Println("ongeldige url")
 		return nil
 	}
@@ -135,15 +141,44 @@ func NewCrawlItemFromString(str *string) *CrawlItem {
 		ds = &downloadStarted
 	}
 
-	return &CrawlItem{
-		URL:                 url,
+	if subdomains == nil {
+		return &CrawlItem{
+			URL:                 u,
+			Depth:               depth,
+			Cycle:               cycle,
+			Ignore:              ignore,
+			FailCount:           failCount,
+			LastDownload:        d,
+			LastDownloadStarted: ds,
+		}
+	}
+
+	subdomainIndex, err := strconv.Atoi(parts[7])
+	if err != nil {
+		fmt.Println("ongeldige subdomainIndex")
+		return nil
+	}
+
+	if len(subdomains) <= subdomainIndex {
+		fmt.Println("subdomain niet gevonden")
+		return nil
+	}
+	subdomain := subdomains[subdomainIndex]
+
+	item := &CrawlItem{
+		URL:                 u,
 		Depth:               depth,
 		Cycle:               cycle,
 		Ignore:              ignore,
 		FailCount:           failCount,
 		LastDownload:        d,
 		LastDownloadStarted: ds,
+		Subdomain:           subdomain,
 	}
+
+	subdomain.AlreadyVisted[cleanURLPath(u)] = item
+
+	return item
 }
 
 func (i *CrawlItem) String() string {
@@ -201,5 +236,9 @@ func TimeToString(time *time.Time) string {
 }
 
 func (i *CrawlItem) SaveToString() string {
-	return fmt.Sprintf("%s	%v	%v	%v	%v	%s	%s", i.URL, i.Depth, i.Cycle, i.Ignore, i.FailCount, TimeToString(i.LastDownload), TimeToString(i.LastDownloadStarted))
+	var index int
+	if i.Subdomain != nil {
+		index = i.Subdomain.Index
+	}
+	return fmt.Sprintf("%s	%v	%v	%v	%v	%s	%s	%v", i.URL, i.Depth, i.Cycle, i.Ignore, i.FailCount, TimeToString(i.LastDownload), TimeToString(i.LastDownloadStarted), index)
 }

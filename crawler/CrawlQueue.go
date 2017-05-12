@@ -12,11 +12,11 @@ type CrawlQueue struct {
 	Name   string
 }
 
-func (q *CrawlQueue) ReadFromReader(reader *bufio.Reader) {
+func (q *CrawlQueue) ReadFromReader(reader *bufio.Reader, subdomains []*Subdomain) {
 	line, _, _ := reader.ReadLine()
 	for len(line) > 0 {
 		str := string(line)
-		item := NewCrawlItemFromString(&str)
+		item := NewCrawlItemFromString(&str, subdomains)
 		if item != nil {
 			q.Push(item)
 		} else {

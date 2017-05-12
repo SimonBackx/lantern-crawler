@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/PuerkitoBio/purell"
+	//"github.com/PuerkitoBio/purell"
 	"io"
 	"math/rand"
 	"net/http"
@@ -17,6 +17,12 @@ import (
 )
 
 const maxRecrawlDepth = 3
+
+type Subdomain struct {
+	Url           *url.URL
+	Index         int
+	AlreadyVisted map[string]*CrawlItem
+}
 
 type Hostworker struct {
 	Host   string // Domain without subdomains!
@@ -46,7 +52,7 @@ type Hostworker struct {
 	// omdat item.NeedRecrawl false geeft. We
 	// gaan deze af en toe uitkuisen en items die NeedsRecrawl true geven verwijderen
 	// zo geraken we bewust pagina's kwijt waar nergens nog naar wordt verwezen
-	AlreadyVisited map[string]*CrawlItem
+	Subdomains map[string]*Subdomain
 
 	// Lijst met alle url's met diepte = 0. Deze staan cronologisch gerangschikt
 	// van laatste gedownload naar meest recent gedownload
@@ -105,14 +111,14 @@ func NewHostWorkerFromFile(file *os.File, crawler *Crawler) *Hostworker {
 }
 
 func (w *Hostworker) FillAlreadyVisited(q *CrawlQueue) {
-	item := q.First
+	/*item := q.First
 	for item != nil {
 		uri, err := cleanURLPath(*item.URL)
 		if err == nil {
-			w.AlreadyVisited[uri] = item
+			w.AlreadyVisited[item.URL.Hostname()][uri] = item
 		}
 		item = item.Next
-	}
+	}*/
 }
 
 func (w *Hostworker) GetRecrawlDuration() time.Duration {
@@ -135,10 +141,10 @@ func NewHostworker(host string, crawler *Crawler) *Hostworker {
 		IntroductionPoints: NewCrawlQueue("Introduction points"),
 		FailedQueue:        NewLeveledQueue(),
 
-		AlreadyVisited: make(map[string]*CrawlItem),
-		NewItems:       newPopChannel(),
-		stop:           crawler.Stop,
-		crawler:        crawler,
+		Subdomains: make(map[string]*Subdomain),
+		NewItems:   newPopChannel(),
+		stop:       crawler.Stop,
+		crawler:    crawler,
 	}
 
 	return w
@@ -258,8 +264,11 @@ func (w *Hostworker) Run(client *http.Client) {
 }
 
 func (w *Hostworker) Request(item *CrawlItem) {
+	// todo: . / .. splitten verwijderen in ResolveReference
+	// en misschien meteen string van maken?
+	reqUrl := item.Subdomain.Url.ResolveReference(item.URL)
 
-	if request, err := http.NewRequest("GET", item.URL.String(), nil); err == nil {
+	if request, err := http.NewRequest("GET", reqUrl.String(), nil); err == nil {
 		request.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1; rv:45.0) Gecko/20100101 Firefox/45.0")
 		request.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 		request.Header.Add("Accept_Language", "en-US,en;q=0.5")
@@ -427,11 +436,8 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 
 	workerResult := NewWorkerResult()
 
-	if result.Links != nil {
-		for _, link := range result.Links {
-			// todo: spaties / tabs verwijderen uit url voor of einde
-			u := link.Href
-
+	if result.Urls != nil {
+		for _, u := range result.Urls {
 			// Convert links to absolute url
 			ResolveReferenceNoCopy(response.Request.URL, u)
 
@@ -595,58 +601,70 @@ func (w *Hostworker) GetNextRequest() *CrawlItem {
 	return w.LowPriorityQueue.Pop()
 }
 
-func cleanURLPath(u url.URL) (string, error) {
-	// todo!!!: verbruikt te veel geheugen
-	//
-	u.Scheme = "" // todo: checken?
-
-	normalized := purell.NormalizeURL(&u,
-		purell.FlagDecodeUnnecessaryEscapes|
-			purell.FlagUppercaseEscapes|
-			purell.FlagEncodeNecessaryEscapes|
-			purell.FlagRemoveDefaultPort|
-			purell.FlagRemoveEmptyQuerySeparator|
-			purell.FlagRemoveFragment|
-			purell.FlagRemoveEmptyPortSeparator|
-			purell.FlagRemoveTrailingSlash)
-
-	// Allocatie vermijden???
-	clean, err := url.ParseRequestURI(normalized)
-
-	if err != nil {
-		return "", err
+func cleanURLPath(u *url.URL) string {
+	str := []byte(u.String())
+	if len(str) == 0 {
+		return string(str)
 	}
 
-	return clean.String(), nil
+	// Remove trailing /
+	if str[len(str)-1] == '/' {
+		return string(str[:len(str)-1])
+	}
+
+	return string(str)
 }
 
-func (w *Hostworker) VisitedItem(item *CrawlItem) {
-	uri, err := cleanURLPath(*item.URL)
-	if err != nil {
-		w.crawler.cfg.LogError(err)
-		return
-	}
+// Updates the absolute url to become relative
+// Returns the url without path of the absolute url
+func splitUrlRelative(absolute *url.URL) *url.URL {
+	domain := *absolute
+	domain.Path = ""
 
-	w.AlreadyVisited[uri] = item
+	absolute.Scheme = ""
+	absolute.Host = ""
+	absolute.User = nil
+
+	return &domain
+}
+
+func makeRelative(absolute *url.URL) {
+	absolute.Scheme = ""
+	absolute.Host = ""
+	absolute.User = nil
 }
 
 /**
  * Als internal = false mag sourceItem = nil
  */
 func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, internal bool) (*CrawlItem, error) {
-	uri, err := cleanURLPath(*foundUrl)
-	if err != nil {
-		w.crawler.cfg.LogError(err)
-		return nil, err
-	}
-
 	if !foundUrl.IsAbs() {
 		return nil, nil
 	}
 
-	item, found := w.AlreadyVisited[uri]
+	subdomain, subdomainFound := w.Subdomains[foundUrl.Host]
+	var item *CrawlItem
+	var found bool
+
+	if !subdomainFound {
+		subdomainUrl := splitUrlRelative(foundUrl)
+		subdomain = &Subdomain{Url: subdomainUrl, AlreadyVisted: make(map[string]*CrawlItem)}
+		w.Subdomains[subdomainUrl.Host] = subdomain
+	} else {
+		makeRelative(foundUrl)
+	}
+
+	// Vanaf nu mag foundUrl.Host niet meer gebruikt worden! Deze bestaat niet meer
+	uri := cleanURLPath(foundUrl)
+
+	if subdomainFound {
+		item, found = subdomain.AlreadyVisted[uri]
+	}
+
 	if !found {
 		item = NewCrawlItem(foundUrl)
+		item.Subdomain = subdomain
+
 		if internal {
 			item.Cycle = sourceItem.Cycle
 		} else {
@@ -654,10 +672,12 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 			item.Cycle = w.LatestCycle
 
 			// Schema meteen juist zetten
-			item.URL.Scheme = w.Scheme
+			if !subdomainFound {
+				subdomain.Url.Scheme = w.Scheme
+			}
 		}
 
-		w.AlreadyVisited[uri] = item
+		subdomain.AlreadyVisted[uri] = item
 	} else {
 		if item.IsUnavailable() {
 			// Deze url is onbereikbaar, ofwel geen HTML bestand
@@ -672,7 +692,7 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 		item.Depth = 0
 
 	} else {
-		if !found || item.Depth >= sourceItem.Depth+1 {
+		if !found || item.Depth > sourceItem.Depth+1 {
 			item.Depth = sourceItem.Depth + 1
 		}
 	}
@@ -760,60 +780,42 @@ func (w *Hostworker) ReadFromReader(reader *bufio.Reader) {
 	}
 	w.LatestCycle = num
 
-	w.IntroductionPoints.ReadFromReader(reader)
-	w.PriorityQueue.ReadFromReader(reader)
-	w.Queue.ReadFromReader(reader)
-	w.LowPriorityQueue.ReadFromReader(reader)
-	w.FailedQueue.ReadFromReader(reader)
+	// Subdomains
+	line, _, _ = reader.ReadLine()
+	subdomains := make([]*Subdomain, 0)
+	for len(line) > 0 {
+		u, err := url.Parse(string(line))
+		if err != nil {
+			fmt.Println("Fout bij lezen subdomains")
+			return
+		}
+		subdomain := &Subdomain{Url: u, AlreadyVisted: make(map[string]*CrawlItem)}
+		w.Subdomains[u.Host] = subdomain
+		subdomains = append(subdomains, subdomain)
+		line, _, _ = reader.ReadLine()
+	}
 
+	w.IntroductionPoints.ReadFromReader(reader, subdomains)
+	w.PriorityQueue.ReadFromReader(reader, subdomains)
+	w.Queue.ReadFromReader(reader, subdomains)
+	w.LowPriorityQueue.ReadFromReader(reader, subdomains)
+	w.FailedQueue.ReadFromReader(reader, subdomains)
+
+	// Already visited items
 	line, _, _ = reader.ReadLine()
 	for len(line) > 0 {
 		str = string(line)
-		item := NewCrawlItemFromString(&str)
-		if item != nil {
-			w.VisitedItem(item)
-		} else {
+		item := NewCrawlItemFromString(&str, subdomains)
+		if item == nil {
 			fmt.Println("Invalid item: " + str)
 		}
 		line, _, _ = reader.ReadLine()
 	}
-
-	// Alle queue's toevoegen aan already visited
-	var item *CrawlItem
-	item = w.IntroductionPoints.First
-	for item != nil {
-		w.VisitedItem(item)
-		item = item.Next
-	}
-	item = w.PriorityQueue.First
-	for item != nil {
-		w.VisitedItem(item)
-		item = item.Next
-	}
-	item = w.Queue.First
-	for item != nil {
-		w.VisitedItem(item)
-		item = item.Next
-	}
-	item = w.LowPriorityQueue.First
-	for item != nil {
-		w.VisitedItem(item)
-		item = item.Next
-	}
-
-	for _, queue := range w.FailedQueue.Levels {
-		item = queue.First
-		for item != nil {
-			w.VisitedItem(item)
-			item = item.Next
-		}
-	}
-
 }
 
 func (w *Hostworker) SaveToWriter(writer *bufio.Writer) {
 	str := fmt.Sprintf(
-		"%s	%s	%v	%v	%v",
+		"%s	%s	%v	%v	%v\n",
 		w.Host,
 		w.Scheme,
 		w.FailStreak,
@@ -821,6 +823,17 @@ func (w *Hostworker) SaveToWriter(writer *bufio.Writer) {
 		w.LatestCycle,
 	)
 	writer.WriteString(str)
+
+	// Subdomains
+	i := 0
+	for _, subdomain := range w.Subdomains {
+		subdomain.Index = i
+		// Index wordt hier niet meteen uitgeschreven, maar zal door crawlItem's later uitgeschreven wordne
+		// zodat ze de subdomain kunnen terug vinden
+		writer.WriteString(subdomain.Url.String())
+		writer.WriteString("\n")
+		i++
+	}
 	writer.WriteString("\n")
 
 	w.IntroductionPoints.SaveToWriter(writer)
@@ -830,11 +843,13 @@ func (w *Hostworker) SaveToWriter(writer *bufio.Writer) {
 	w.FailedQueue.SaveToWriter(writer)
 
 	// Nu de rest opslaan
-	for _, value := range w.AlreadyVisited {
-		if value.Queue == nil {
-			// Staat in geen andere queue
-			writer.WriteString(value.SaveToString())
-			writer.WriteString("\n")
+	for _, subdomain := range w.Subdomains {
+		for _, item := range subdomain.AlreadyVisted {
+			if item.Queue == nil {
+				// Staat in geen andere queue
+				writer.WriteString(item.SaveToString())
+				writer.WriteString("\n")
+			}
 		}
 	}
 }
@@ -881,7 +896,7 @@ func (w *Hostworker) IsEqual(b *Hostworker) bool {
 	}
 
 	// todo: already visited checken!
-	if len(w.AlreadyVisited) != len(b.AlreadyVisited) {
+	/*if len(w.AlreadyVisited) != len(b.AlreadyVisited) {
 		return false
 	}
 
@@ -893,7 +908,7 @@ func (w *Hostworker) IsEqual(b *Hostworker) bool {
 		if !value.IsEqual(other) {
 			return false
 		}
-	}
+	}*/
 
 	return true
 }

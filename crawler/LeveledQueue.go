@@ -51,10 +51,10 @@ func (l *LeveledQueue) IsEqual(b *LeveledQueue) bool {
 	return true
 }
 
-func (l *LeveledQueue) ReadFromReader(reader *bufio.Reader) {
+func (l *LeveledQueue) ReadFromReader(reader *bufio.Reader, subdomains []*Subdomain) {
 	for i := 0; i <= maxFailCount; i++ {
 		queue := NewCrawlQueue("Leveled queue")
-		queue.ReadFromReader(reader)
+		queue.ReadFromReader(reader, subdomains)
 		l.Levels[i] = queue
 	}
 }

@@ -3,21 +3,17 @@ package crawler
 import (
 	"bytes"
 	"github.com/SimonBackx/lantern-crawler/queries"
-	"github.com/andybalholm/cascadia"
 	"golang.org/x/net/html"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"regexp"
 	"strings"
 )
 
-var linkSelector = cascadia.MustCompile("a")
-var headSelector = cascadia.MustCompile("head title")
-
 type ParseResult struct {
-	Links   []*Link
+	Urls    []*url.URL
 	Results []*queries.Result
+	Title   *string
 }
 
 /*func byteArrayToString(b []byte) string {
@@ -26,89 +22,117 @@ type ParseResult struct {
 
 // Momenteel nog geen return value, dat is voor later
 func Parse(reader io.Reader, queryList []queries.Query) (*ParseResult, error) {
-	data, err := ioutil.ReadAll(reader)
+	result := ReadHtml(reader)
+
+	/*htmlDoc, err := html.Parse(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
-
-	htmlDoc, err := html.Parse(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	/*var buffer bytes.Buffer
-	  b := &buffer
-	  err2 := html.Render(b, htmlDoc)
-	  if err2 != nil {
-	      return nil, err2
-	  }*/
-	result := &ParseResult{}
 
 	FindLinks(htmlDoc, result)
 	title := FindTitle(htmlDoc)
 
 	byteString := NodeToText(htmlDoc)
-	document := string(data[:])
+	document := string(data[:])*/
 
 	// Queries op uitvoeren
-	for _, query := range queryList {
-		snippet := query.Execute(byteString)
+	/*for _, query := range queryList {
+		snippet := query.Execute(data)
 		if snippet != nil {
-			apiResult := queries.NewResult(query, nil, nil, &document, title, snippet)
+			document := string(data[:])
+			apiResult := queries.NewResult(query, nil, nil, &document, result.Title, snippet)
 			result.Results = append(result.Results, apiResult)
 		}
-	}
+	}*/
 
 	return result, nil
 }
 
-type Link struct {
-	Href *url.URL
-}
+func ReadHtml(reader io.Reader) *ParseResult {
+	head_depth := 0
+	title_depth := 0
+	var title string
+	result := &ParseResult{Urls: make([]*url.URL, 0)}
 
-func FindLinks(document *html.Node, result *ParseResult) {
+	z := html.NewTokenizer(reader)
+	for {
+		tt := z.Next()
+		// Bytes worden hergebruikt, dus als ze
+		// opgeslagen moeten worden is een kopie noodzakelijk
+		switch tt {
+		case html.ErrorToken:
+			return result
 
-	selection := linkSelector.MatchAll(document)
-	if selection == nil {
-		return
-	}
-
-	links := make([]*Link, len(selection))
-
-	errorOffset := 0
-	for i, node := range selection {
-		attr := NodeAttr(node, "href")
-		if attr != nil {
-			// todo: begin en einde strippen (spaties en tabs!)
-			attrUrl, err := url.Parse(*attr)
-			if err == nil {
-				links[i-errorOffset] = &Link{attrUrl}
-			} else {
-				errorOffset++
+		case html.TextToken:
+			if title_depth == 1 {
+				// kopie maken
+				title = string(z.Text())
+				result.Title = &title
 			}
-		} else {
-			errorOffset++
+
+		// Links detecteren
+		case html.StartTagToken:
+			tn, _ := z.TagName()
+
+			if len(tn) == 1 && tn[0] == 'a' {
+				key, val, moreAttr := z.TagAttr()
+				for key != nil {
+
+					if string(key) == "href" {
+						attrUrl, _ := ParseUrlFromHref(val)
+						if attrUrl != nil {
+							result.Urls = append(result.Urls, attrUrl)
+						}
+						break
+					}
+
+					if !moreAttr {
+						break
+					}
+					key, val, moreAttr = z.TagAttr()
+				}
+
+			} else if string(tn) == "head" {
+				head_depth++
+			} else if head_depth > 0 && string(tn) == "title" {
+				title_depth++
+			}
+
+		case html.EndTagToken:
+			tn, _ := z.TagName()
+			if string(tn) == "head" {
+				head_depth--
+			} else if head_depth > 0 && string(tn) == "title" {
+				title_depth--
+			}
+
 		}
+		// Process the current token.
 	}
 
-	if errorOffset != 0 {
-		links = links[0 : len(links)-errorOffset]
-	}
-
-	result.Links = links
-
-	return
+	// nooit gebruikt
+	return result
 }
 
-func FindTitle(document *html.Node) *string {
-	selection := headSelector.MatchFirst(document)
-	if selection == nil {
-		return nil
+func ParseUrlFromHref(href []byte) (*url.URL, error) {
+	startIndex := 0
+	endIndex := len(href) - 1
+
+	for startIndex <= endIndex && (href[startIndex] == ' ' || href[startIndex] == '\t' || href[startIndex] == '\n' || href[startIndex] == '\f' || href[startIndex] == '\r') {
+		startIndex++
 	}
 
-	title := string(NodeToText(selection)[:])
+	for endIndex >= 0 && (href[endIndex] == ' ' || href[endIndex] == '\t' || href[endIndex] == '\n' || href[endIndex] == '\f' || href[endIndex] == '\r') {
+		endIndex--
+	}
 
-	return queries.CleanString(&title)
+	if startIndex >= endIndex+1 || startIndex >= len(href) || endIndex < 0 {
+		return nil, nil
+	}
+
+	//fmt.Println("Found href: %s (%s)", string(val[startIndex:endIndex+1]), string(val))
+
+	return url.ParseRequestURI(string(href[startIndex : endIndex+1]))
 }
 
 func NodeAttr(node *html.Node, attrName string) *string {

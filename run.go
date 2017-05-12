@@ -25,7 +25,7 @@ func run(quit chan bool, finished chan bool) {
 	myCrawler := crawler.NewCrawler(conf)
 
 	//urls := []string{"http://torlinkbgs6aabns.onion/", "http://zqktlwi4fecvo6ri.onion/wiki/index.php/Main_Page", "http://w363zoq3ylux5rf5.onion/"}
-	urls := []string{"http://www.scoutswetteren.be"}
+	urls := []string{"http://www.startpagina.nl"}
 
 	for _, str := range urls {
 		u, err := url.ParseRequestURI(str)
