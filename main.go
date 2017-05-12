@@ -11,6 +11,7 @@ import (
 	//"time"
 
 	"github.com/kardianos/service"
+	"github.com/pkg/profile"
 )
 
 var logger service.Logger
@@ -53,6 +54,8 @@ func (p *program) Stop(s service.Service) error {
 //   Handle service controls (optional).
 //   Run the service.
 func main() {
+	defer profile.Start(profile.MemProfile).Stop()
+
 	svcFlag := flag.String("service", "", "Control the system service.")
 	flag.Parse()
 

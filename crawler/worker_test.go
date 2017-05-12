@@ -5,13 +5,14 @@ import (
 	"bytes"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 )
 
 func TestWorkerDepth(test *testing.T) {
 	crawler := NewCrawler(&CrawlerConfig{Testing: true})
-	worker1 := NewHostworker("host1", crawler)
+	worker1 := NewHostworker("test.com", crawler)
 
 	u, err := url.Parse("http://www.test.com")
 	if err != nil {
@@ -267,6 +268,22 @@ func TestWorkerDepth(test *testing.T) {
 		test.Log("Saving worker failed")
 		test.Fail()
 	}
+	worker1.SaveToFile()
 
 	fmt.Printf("%v KB saved", len(str)/1024)
+}
+
+// Duurt 1.2 seconden!
+func BenchmarkLoadingFromFile(b *testing.B) {
+	crawler := NewCrawler(&CrawlerConfig{Testing: true})
+
+	for n := 0; n < b.N; n++ {
+		file, err := os.Open("./progress/host_test.com.txt")
+		if err != nil {
+			continue
+		}
+
+		NewHostWorkerFromFile(file, crawler)
+		file.Close()
+	}
 }

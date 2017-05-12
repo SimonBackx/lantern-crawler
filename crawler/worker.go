@@ -243,7 +243,7 @@ func (w *Hostworker) Run(client *http.Client) {
 			}
 
 			// Onderstaande kansverdeling moet nog minder uniform gemaakt worden
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(8000)+2000))
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(4000)+4000))
 
 			w.RequestStarted(item)
 			w.Request(item)
@@ -369,10 +369,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			} else if strings.Contains(str, "context canceled") {
 				// Negeer failcount bij handmatige cancel
 				item.FailCount--
-			} else {
-				//w.crawler.cfg.LogError(err)
 			}
-
 			w.RequestFailed(item)
 
 			// (Client.Timeout exceeded while awaiting headers)
@@ -432,32 +429,19 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 
 	if result.Links != nil {
 		for _, link := range result.Links {
+			// todo: spaties / tabs verwijderen uit url voor of einde
+			u := link.Href
+
 			// Convert links to absolute url
-			u := response.Request.URL.ResolveReference(&link.Href)
+			ResolveReferenceNoCopy(response.Request.URL, u)
 
 			// Url moet absoluut zijn
-			if u == nil || !u.IsAbs() {
+			if !u.IsAbs() {
+				panic("Resolve reference didn't make absolute")
 				break
 			}
 
 			if !strings.HasPrefix(u.Scheme, "http") {
-				break
-			}
-
-			// Alle invalid characters verwijderen
-			reg := regexp.MustCompile("[^0-9a-zA-Z,.\\-!/()=?`*;:_{}[]\\|~]+")
-			u, err := url.Parse(reg.ReplaceAllString(u.String(), ""))
-			if err != nil {
-				break
-			}
-
-			// Normaisaties toepassen
-			normalized := purell.NormalizeURL(u,
-				purell.FlagsSafe|purell.FlagRemoveFragment)
-			u, err = url.ParseRequestURI(normalized)
-
-			if err != nil {
-				w.crawler.cfg.LogError(err)
 				break
 			}
 
@@ -499,7 +483,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 				}
 			}
 
-			if w.crawler.GetDomainForUrl(u) == w.Host {
+			if w.crawler.GetDomainForUrl(u, domains) == w.Host {
 				// Interne URL's meteen verwerken
 				w.NewReference(u, item, true)
 			} else {
@@ -509,7 +493,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 	}
 
 	// Kritieke move operatie uitvoeren noodzakelijk?
-	if w.crawler.GetDomainForUrl(item.URL) != w.Host {
+	if w.crawler.GetDomainForUrl(item.URL, strings.Split(item.URL.Hostname(), ".")) != w.Host {
 		// Negeren vanaf nu voor deze worker
 		w.RequestIgnored(item)
 

@@ -12,6 +12,9 @@ import (
 	"strings"
 )
 
+var linkSelector = cascadia.MustCompile("a")
+var headSelector = cascadia.MustCompile("head title")
+
 type ParseResult struct {
 	Links   []*Link
 	Results []*queries.Result
@@ -60,12 +63,12 @@ func Parse(reader io.Reader, queryList []queries.Query) (*ParseResult, error) {
 }
 
 type Link struct {
-	Href url.URL
+	Href *url.URL
 }
 
 func FindLinks(document *html.Node, result *ParseResult) {
-	selector := cascadia.MustCompile("a")
-	selection := selector.MatchAll(document)
+
+	selection := linkSelector.MatchAll(document)
 	if selection == nil {
 		return
 	}
@@ -78,7 +81,7 @@ func FindLinks(document *html.Node, result *ParseResult) {
 		if attr != nil {
 			attrUrl, err := url.Parse(*attr)
 			if err == nil {
-				links[i-errorOffset] = &Link{*attrUrl}
+				links[i-errorOffset] = &Link{attrUrl}
 			} else {
 				errorOffset++
 			}
@@ -97,8 +100,7 @@ func FindLinks(document *html.Node, result *ParseResult) {
 }
 
 func FindTitle(document *html.Node) *string {
-	selector := cascadia.MustCompile("head title")
-	selection := selector.MatchFirst(document)
+	selection := headSelector.MatchFirst(document)
 	if selection == nil {
 		return nil
 	}
