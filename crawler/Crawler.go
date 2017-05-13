@@ -204,6 +204,7 @@ func (crawler *Crawler) WakeSleepingWorkers() {
 		worker.Running = true
 		worker.Sleeping = false
 		crawler.waitGroup.Add(1)
+
 		go worker.Run(client)
 	}
 }
@@ -342,7 +343,6 @@ func (crawler *Crawler) Start(signal chan int) {
 
 			// Pending items aan queue toevoegen, als die er nog zijn
 			// zodat we zeker zijn dat de queue leeg is
-			worker.EmptyPendingItems()
 
 			// De worker die is gaan slapen terug toevoegen
 			// als die nog items heeft, anders stellen we dit uit tot we weer items vinden

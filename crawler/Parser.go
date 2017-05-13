@@ -151,9 +151,12 @@ func ParseUrlFromHref(href []byte) (*url.URL, error) {
 		return nil, nil
 	}
 
-	//fmt.Println("Found href: %s (%s)", string(val[startIndex:endIndex+1]), string(val))
-
-	return url.ParseRequestURI(string(href[startIndex : endIndex+1]))
+	u, err := url.Parse(string(href[startIndex : endIndex+1]))
+	if err != nil {
+		return u, err
+	}
+	u.Fragment = ""
+	return u, err
 }
 
 func NodeAttr(node *html.Node, attrName string) *string {

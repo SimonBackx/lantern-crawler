@@ -77,6 +77,9 @@ type Hostworker struct {
 	sleepAfter int
 
 	LatestCycle int
+
+	InMemory           bool
+	cachedWantsToGetUp bool
 }
 
 func (w *Hostworker) String() string {
@@ -87,12 +90,12 @@ func (w *Hostworker) String() string {
  * Sla enkel de RecrawlQueue op. De AlreadyVisited maakt niet veel uit aangezien we deze uiteindelijk toch gaan opnieuw crawlen
  * als we de recrawl queue opnieuw crawlen.
  */
-func (w *Hostworker) SaveToFile() {
+func (w *Hostworker) SaveToFile() bool {
 	os.Mkdir("progress", 0777)
 	file, err := os.Create("./progress/host_" + w.Host + ".txt")
 	if err != nil {
 		w.crawler.cfg.LogError(err)
-		return
+		return false
 	}
 	defer func() {
 		file.Close()
@@ -101,6 +104,7 @@ func (w *Hostworker) SaveToFile() {
 	writer := bufio.NewWriter(file)
 	w.SaveToWriter(writer)
 	writer.Flush()
+	return true
 }
 
 func NewHostWorkerFromFile(file *os.File, crawler *Crawler) *Hostworker {
@@ -108,6 +112,38 @@ func NewHostWorkerFromFile(file *os.File, crawler *Crawler) *Hostworker {
 	w := NewHostworker("", crawler)
 	w.ReadFromReader(reader)
 	return w
+}
+
+func (w *Hostworker) MoveToDisk() {
+	w.cachedWantsToGetUp = w.WantsToGetUp()
+	if !w.SaveToFile() {
+		return
+	}
+	w.InMemory = false
+	w.IntroductionPoints = nil
+	w.Subdomains = nil
+	w.PriorityQueue = nil
+	w.LowPriorityQueue = nil
+	w.Queue = nil
+	w.FailedQueue = nil
+}
+
+func (w *Hostworker) MoveToMemory() {
+	file, err := os.Open("./progress/host_" + w.Host + ".txt")
+	if err != nil {
+		panic("Coudn't move to memory: file not found")
+	}
+
+	w.InMemory = true
+	w.IntroductionPoints = NewCrawlQueue("Introduction points")
+	w.Subdomains = make(map[string]*Subdomain)
+	w.PriorityQueue = NewCrawlQueue("Priority Queue")
+	w.LowPriorityQueue = NewCrawlQueue("Low Priority Queue")
+	w.Queue = NewCrawlQueue("Queue")
+	w.FailedQueue = NewLeveledQueue()
+	if !w.ReadFromReader(bufio.NewReader(file)) {
+		panic("Coudn't move to memory: file not readable")
+	}
 }
 
 func (w *Hostworker) FillAlreadyVisited(q *CrawlQueue) {
@@ -145,12 +181,16 @@ func NewHostworker(host string, crawler *Crawler) *Hostworker {
 		NewItems:   newPopChannel(),
 		stop:       crawler.Stop,
 		crawler:    crawler,
+		InMemory:   true,
 	}
 
 	return w
 }
 
 func (w *Hostworker) EmptyPendingItems() {
+	if !w.InMemory {
+		return
+	}
 	select {
 	case q := <-w.NewItems:
 		w.AddQueue(q)
@@ -160,6 +200,10 @@ func (w *Hostworker) EmptyPendingItems() {
 }
 
 func (w *Hostworker) WantsToGetUp() bool {
+	if !w.InMemory {
+		return w.cachedWantsToGetUp
+	}
+
 	if w.FailStreak > 20 && w.SucceededDownloads == 0 {
 		// Passieve modus
 		return false
@@ -213,6 +257,11 @@ func (w *Hostworker) Recrawl() {
 
 func (w *Hostworker) Run(client *http.Client) {
 	defer func() {
+		if w.InMemory {
+			w.EmptyPendingItems()
+			w.MoveToDisk()
+		}
+
 		// Aangeven dat deze goroutine afgelopen is
 		w.crawler.waitGroup.Done()
 
@@ -227,7 +276,15 @@ func (w *Hostworker) Run(client *http.Client) {
 	w.Client = client
 
 	// Snel horizontaal uitbreiden: neem laag getal
-	w.sleepAfter = rand.Intn(4) + 6
+	w.sleepAfter = 10 + rand.Intn(100) //rand.Intn(4) + 6
+
+	if !w.InMemory {
+		w.MoveToMemory()
+		if !w.InMemory {
+			return
+		}
+		w.EmptyPendingItems()
+	}
 
 	for {
 		select {
@@ -244,9 +301,6 @@ func (w *Hostworker) Run(client *http.Client) {
 				return
 			}
 
-			// Onderstaande kansverdeling moet nog minder uniform gemaakt worden
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(3000)+500))
-
 			w.RequestStarted(item)
 			w.Request(item)
 
@@ -254,6 +308,7 @@ func (w *Hostworker) Run(client *http.Client) {
 				// Meteen stoppen
 				return
 			}
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(4000)+2000))
 
 		}
 	}
@@ -616,10 +671,13 @@ func cleanURLPath(u *url.URL) string {
 func splitUrlRelative(absolute *url.URL) *url.URL {
 	domain := *absolute
 	domain.Path = ""
+	domain.RawQuery = ""
+	domain.ForceQuery = false
 
 	absolute.Scheme = ""
 	absolute.Host = ""
 	absolute.User = nil
+	absolute.ForceQuery = false
 
 	return &domain
 }
@@ -628,12 +686,23 @@ func makeRelative(absolute *url.URL) {
 	absolute.Scheme = ""
 	absolute.Host = ""
 	absolute.User = nil
+	absolute.ForceQuery = false
 }
 
 /**
  * Als internal = false mag sourceItem = nil
  */
 func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, internal bool) (*CrawlItem, error) {
+	if !w.InMemory {
+		count := w.NewItems.stack(foundUrl)
+		if count > 100 {
+			w.crawler.cfg.LogInfo("Host loaded to memory because of large newitems stack")
+			w.MoveToMemory()
+			w.EmptyPendingItems()
+		}
+		return nil, nil
+	}
+
 	if !foundUrl.IsAbs() {
 		return nil, nil
 	}
@@ -740,16 +809,16 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 //
 //
 
-func (w *Hostworker) ReadFromReader(reader *bufio.Reader) {
+func (w *Hostworker) ReadFromReader(reader *bufio.Reader) bool {
 	// Eerst de basis gegevens:
 	line, _, _ := reader.ReadLine()
 	if len(line) == 0 {
-		return
+		return false
 	}
 	str := string(line)
 	parts := strings.Split(str, "	")
 	if len(parts) != 5 {
-		return
+		return false
 	}
 
 	w.Host = parts[0]
@@ -758,21 +827,21 @@ func (w *Hostworker) ReadFromReader(reader *bufio.Reader) {
 	num, err := strconv.Atoi(parts[2])
 	if err != nil {
 		fmt.Println("Invalid failstreak")
-		return
+		return false
 	}
 	w.FailStreak = num
 
 	num, err = strconv.Atoi(parts[3])
 	if err != nil {
 		fmt.Println("Invalid SucceededDownloads")
-		return
+		return false
 	}
 	w.SucceededDownloads = num
 
 	num, err = strconv.Atoi(parts[4])
 	if err != nil {
 		fmt.Println("Invalid LatestCycle")
-		return
+		return false
 	}
 	w.LatestCycle = num
 
@@ -783,7 +852,7 @@ func (w *Hostworker) ReadFromReader(reader *bufio.Reader) {
 		u, err := url.Parse(string(line))
 		if err != nil {
 			fmt.Println("Fout bij lezen subdomains")
-			return
+			return false
 		}
 		subdomain := &Subdomain{Url: u, AlreadyVisted: make(map[string]*CrawlItem)}
 		w.Subdomains[u.Host] = subdomain
@@ -807,6 +876,7 @@ func (w *Hostworker) ReadFromReader(reader *bufio.Reader) {
 		}
 		line, _, _ = reader.ReadLine()
 	}
+	return true
 }
 
 func (w *Hostworker) SaveToWriter(writer *bufio.Writer) {
