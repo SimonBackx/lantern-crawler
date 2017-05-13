@@ -7,11 +7,8 @@ package main
 
 import (
 	"flag"
-	"log"
-	//"time"
-
 	"github.com/kardianos/service"
-	"github.com/pkg/profile"
+	"log"
 )
 
 var logger service.Logger
@@ -54,14 +51,12 @@ func (p *program) Stop(s service.Service) error {
 //   Handle service controls (optional).
 //   Run the service.
 func main() {
-	defer profile.Start(profile.MemProfile).Stop()
-
 	svcFlag := flag.String("service", "", "Control the system service.")
 	flag.Parse()
 
 	svcConfig := &service.Config{
-		Name:        "Darkspider",
-		DisplayName: "Darkspider",
+		Name:        "Lantern-crawler",
+		DisplayName: "Lantern-crawler",
 		Description: "Cyber threat collection in the darkweb",
 	}
 

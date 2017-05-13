@@ -27,6 +27,7 @@ func NewQuery(name string, q QueryAction) *Query {
 
 func (q *Query) Execute(b []byte) *string {
 	result := q.Query.Execute(b)
+
 	if result == nil || len(result) == 0 {
 		return nil
 	}

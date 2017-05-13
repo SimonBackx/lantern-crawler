@@ -286,7 +286,7 @@ func TestWorkerDepth(test *testing.T) {
 	fmt.Printf("%v KB saved", len(str)/1024)
 }
 
-// Duurt 1.2 seconden!
+// Duurt 0.8 seconden!
 func BenchmarkLoadingFromFile(b *testing.B) {
 	crawler := NewCrawler(&CrawlerConfig{Testing: true})
 

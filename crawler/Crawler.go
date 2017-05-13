@@ -70,9 +70,9 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 		Workers:            make(map[string]*Hostworker),
 		SleepingCrawlers:   NewWorkerList(),
 		RecrawlList:        NewWorkerList(),
-		WorkerEnded:        make(chan *Hostworker, 40),
-		WorkerResult:       make(chan *WorkerResult, 100),
-		WorkerIntroduction: make(chan *Hostworker, 100),
+		WorkerEnded:        make(chan *Hostworker, 1),
+		WorkerResult:       make(chan *WorkerResult, 1),
+		WorkerIntroduction: make(chan *Hostworker, 1),
 		speedLogger:        NewSpeedLogger(),
 		Stop:               make(chan struct{}, 1),
 		RecrawlTimer:       make(<-chan time.Time, 1),
@@ -141,7 +141,7 @@ func (crawler *Crawler) GetDomainForUrl(u *url.URL, splitted []string) string {
 }
 
 func (crawler *Crawler) ProcessUrl(u *url.URL) {
-	host := crawler.GetDomainForUrl(u, strings.Split(u.Hostname(), "."))
+	host := crawler.GetDomainForUrl(u, strings.Split(u.Host, "."))
 	worker := crawler.Workers[host]
 
 	if worker == nil {

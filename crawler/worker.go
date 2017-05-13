@@ -227,11 +227,7 @@ func (w *Hostworker) Run(client *http.Client) {
 	w.Client = client
 
 	// Snel horizontaal uitbreiden: neem laag getal
-	if w.SucceededDownloads == 0 {
-		w.sleepAfter = rand.Intn(5) + 1
-	} else {
-		w.sleepAfter = rand.Intn(20) + 6
-	}
+	w.sleepAfter = rand.Intn(4) + 6
 
 	for {
 		select {
@@ -249,7 +245,7 @@ func (w *Hostworker) Run(client *http.Client) {
 			}
 
 			// Onderstaande kansverdeling moet nog minder uniform gemaakt worden
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(4000)+4000))
+			time.Sleep(time.Millisecond * time.Duration(rand.Intn(3000)+500))
 
 			w.RequestStarted(item)
 			w.Request(item)
@@ -274,7 +270,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 		request.Header.Add("Accept_Language", "en-US,en;q=0.5")
 		request.Header.Add("Connection", "keep-alive")
 
-		request.Close = true // Connectie weggooien
+		//request.Close = true // Connectie weggooien
 		request = request.WithContext(w.crawler.context)
 
 		if response, err := w.Client.Do(request); err == nil {
@@ -367,7 +363,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				w.FailStreak--
 			} else if strings.Contains(str, "Client.Timeout") {
 				w.crawler.speedLogger.LogTimeout()
-			} else if strings.Contains(str, "timeout") {
+			} else if strings.Contains(str, "timeout awaiting response headers") {
 				w.crawler.speedLogger.LogTimeout()
 			} else if strings.Contains(str, "stopped after 10 redirects") {
 				w.RequestIgnored(item)
@@ -499,7 +495,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 	}
 
 	// Kritieke move operatie uitvoeren noodzakelijk?
-	if w.crawler.GetDomainForUrl(item.URL, strings.Split(item.URL.Hostname(), ".")) != w.Host {
+	if w.crawler.GetDomainForUrl(item.URL, strings.Split(item.URL.Host, ".")) != w.Host {
 		// Negeren vanaf nu voor deze worker
 		w.RequestIgnored(item)
 
@@ -893,6 +889,28 @@ func (w *Hostworker) IsEqual(b *Hostworker) bool {
 
 	if !w.FailedQueue.IsEqual(b.FailedQueue) {
 		return false
+	}
+
+	if len(w.Subdomains) != len(b.Subdomains) {
+		return false
+	}
+
+	for key, subdomain := range w.Subdomains {
+		otherSub, found := b.Subdomains[key]
+		if !found {
+			return false
+		}
+
+		for key, value := range subdomain.AlreadyVisted {
+			other, found := otherSub.AlreadyVisted[key]
+			if !found {
+				return false
+			}
+
+			if !value.IsEqual(other) {
+				return false
+			}
+		}
 	}
 
 	// todo: already visited checken!

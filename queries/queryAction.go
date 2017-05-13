@@ -9,6 +9,7 @@ import (
 /// Geeft true / false aan afhankelijk van de match
 type QueryAction interface {
 	Execute(b []byte) [][]int
+
 	String() string
 }
 

@@ -59,6 +59,7 @@ func (o *OperatorQuery) Execute(b []byte) [][]int {
 	if first == nil {
 		return last
 	}
+
 	return append(first, last...)
 }
 

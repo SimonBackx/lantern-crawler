@@ -17,7 +17,7 @@ type SpeedLogger struct {
 }
 
 func NewSpeedLogger() *SpeedLogger {
-	logger := &SpeedLogger{Count: 0, Ticker: time.NewTicker(10 * time.Second)}
+	logger := &SpeedLogger{Count: 0, Ticker: time.NewTicker(60 * time.Second)}
 	go logger.Run()
 	return logger
 }
@@ -34,9 +34,9 @@ func (logger *SpeedLogger) Run() {
 		workers := logger.Crawler.distributor.UsedClients()
 
 		domains := len(logger.Crawler.Workers)
-		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v requests, %v workers, %v domains", requests/10, workers, domains))
+		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v requests, %v workers, %v domains", int(requests/60), workers, domains))
 
-		downloadSpeed := int(float64(logger.DownloadSize) / 10000) // * 6
+		downloadSpeed := int(float64(logger.DownloadSize) / 60000) // * 6
 		downloadSize := 0
 		downloadTime := 0
 
@@ -53,11 +53,9 @@ func (logger *SpeedLogger) Run() {
 		}
 
 		// Als er veel timeouts zijn -> vertragen
-		if logger.Timeouts > 50 && logger.Crawler.distributor.AvailableClients() >= 0 {
+		if logger.Timeouts > 60 && logger.Crawler.distributor.AvailableClients() >= 0 {
 			logger.Crawler.distributor.DecreaseClients()
-		}
-
-		if logger.Timeouts < 20 && logger.Crawler.distributor.AvailableClients() == 0 {
+		} else if logger.Timeouts < 20 && logger.Crawler.distributor.AvailableClients() == 0 {
 			logger.Crawler.distributor.IncreaseClients()
 		}
 
@@ -73,9 +71,9 @@ func (logger *SpeedLogger) Run() {
 	}
 }
 
-func (logger *SpeedLogger) Log(duration time.Duration, bytes int64) {
+func (logger *SpeedLogger) Log(duration time.Duration, bytes int) {
 	logger.Count++
-	logger.DownloadSize += bytes
+	logger.DownloadSize += int64(bytes)
 	logger.DownloadTime += duration
 }
 

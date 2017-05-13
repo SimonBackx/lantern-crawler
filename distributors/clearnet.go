@@ -59,7 +59,7 @@ func (dist *Clearnet) DecreaseClients() {
 }
 
 func (dist *Clearnet) IncreaseClients() {
-	dist.Count = int(float64(dist.Count) * 1.1)
+	dist.Count = int(float64(dist.Count) * 1.05)
 }
 
 func (dist *Clearnet) AvailableClients() int {

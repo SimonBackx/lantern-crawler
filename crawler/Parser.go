@@ -5,6 +5,7 @@ import (
 	"github.com/SimonBackx/lantern-crawler/queries"
 	"golang.org/x/net/html"
 	"io"
+	"io/ioutil"
 	"net/url"
 	"regexp"
 	"strings"
@@ -22,48 +23,64 @@ type ParseResult struct {
 
 // Momenteel nog geen return value, dat is voor later
 func Parse(reader io.Reader, queryList []queries.Query) (*ParseResult, error) {
-	result := ReadHtml(reader)
+	data, err := ioutil.ReadAll(reader)
 
-	/*htmlDoc, err := html.Parse(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
-
-	FindLinks(htmlDoc, result)
-	title := FindTitle(htmlDoc)
-
-	byteString := NodeToText(htmlDoc)
-	document := string(data[:])*/
+	document := string(data[:])
+	result := ReadHtml(data)
+	// Vanaf nu zijn alle tags etc uit data gefilterd en door lege characters
+	// vervangen
 
 	// Queries op uitvoeren
-	/*for _, query := range queryList {
+	for _, query := range queryList {
 		snippet := query.Execute(data)
 		if snippet != nil {
-			document := string(data[:])
 			apiResult := queries.NewResult(query, nil, nil, &document, result.Title, snippet)
 			result.Results = append(result.Results, apiResult)
 		}
-	}*/
+	}
 
 	return result, nil
 }
 
-func ReadHtml(reader io.Reader) *ParseResult {
+func ReadHtml(data []byte) *ParseResult {
+	reader := NewPositionReader(bytes.NewReader(data))
+
 	head_depth := 0
 	title_depth := 0
 	var title string
 	result := &ParseResult{Urls: make([]*url.URL, 0)}
 
 	z := html.NewTokenizer(reader)
+
+	previousEnd := 0
+	ignore_depth := 0
+
 	for {
 		tt := z.Next()
 		// Bytes worden hergebruikt, dus als ze
 		// opgeslagen moeten worden is een kopie noodzakelijk
 		switch tt {
 		case html.ErrorToken:
+			// Al de rest nog wissen
+			data = data[:previousEnd]
 			return result
 
 		case html.TextToken:
+			if ignore_depth == 0 && head_depth == 0 {
+				endIndex := reader.Position - len(z.Buffered())
+				str := z.Raw()
+				startIndex := endIndex - len(str)
+
+				// Nu alles verwijderen van previousEnd tot startIndex
+				for i := previousEnd; i < startIndex; i++ {
+					data[i] = 0
+				}
+				previousEnd = endIndex
+			}
+
 			if title_depth == 1 {
 				// kopie maken
 				title = string(z.Text())
@@ -96,6 +113,8 @@ func ReadHtml(reader io.Reader) *ParseResult {
 				head_depth++
 			} else if head_depth > 0 && string(tn) == "title" {
 				title_depth++
+			} else if string(tn) == "script" || string(tn) == "noscript" || string(tn) == "style" {
+				ignore_depth++
 			}
 
 		case html.EndTagToken:
@@ -104,6 +123,8 @@ func ReadHtml(reader io.Reader) *ParseResult {
 				head_depth--
 			} else if head_depth > 0 && string(tn) == "title" {
 				title_depth--
+			} else if string(tn) == "script" || string(tn) == "noscript" || string(tn) == "style" {
+				ignore_depth--
 			}
 
 		}

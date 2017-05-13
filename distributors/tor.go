@@ -18,7 +18,7 @@ type Tor struct {
 
 func NewTor() *Tor {
 	startSocksPort := 9150
-	availableDaemons := 20
+	availableDaemons := 30
 
 	Clients := NewClientList()
 	for i := 0; i < availableDaemons; i++ {
@@ -90,7 +90,7 @@ func (dist *Tor) DecreaseClients() {
 }
 
 func (dist *Tor) IncreaseClients() {
-	dist.Count = int(float64(dist.Count) * 1.1)
+	dist.Count = int(float64(dist.Count) * 1.05)
 }
 
 func (dist *Tor) AvailableClients() int {
