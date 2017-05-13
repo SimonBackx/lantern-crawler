@@ -7,8 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/url"
-	"regexp"
-	"strings"
 )
 
 type ParseResult struct {
@@ -157,57 +155,4 @@ func ParseUrlFromHref(href []byte) (*url.URL, error) {
 	}
 	u.Fragment = ""
 	return u, err
-}
-
-func NodeAttr(node *html.Node, attrName string) *string {
-	for _, attr := range node.Attr {
-		if attr.Key == attrName {
-			return &attr.Val
-		}
-	}
-	return nil
-}
-
-func NodeToText(node *html.Node) []byte {
-	var buffer bytes.Buffer
-	next := node.FirstChild
-	depth := 0
-	for next != nil && depth >= 0 {
-		if next.Type == html.TextNode {
-			buffer.WriteString(next.Data)
-			buffer.WriteString("\n")
-		}
-
-		if next.FirstChild != nil && !(next.Type == html.ElementNode && (next.Data == "script" || next.Data == "style" || next.Data == "head" || next.Data == "noscript")) {
-			next = next.FirstChild
-			depth++
-		} else {
-			if next.NextSibling == nil {
-				next = next.Parent.NextSibling
-				depth--
-			} else {
-				next = next.NextSibling
-			}
-		}
-	}
-	return buffer.Bytes()
-}
-
-func cleanString(str string) string {
-	beginRegex := regexp.MustCompile("((^[^\\S\n\r]+)|([^\\S\n\r]+$))")
-	spaceRegex := regexp.MustCompile("[^\\S\n\r]+")
-
-	// Lange sequenties eruit halen
-	weirdWords := regexp.MustCompile("[^\\s]{60,}|[-_=+*]{5,}")
-	return weirdWords.ReplaceAllString(spaceRegex.ReplaceAllString(beginRegex.ReplaceAllString(str, ""), " "), "")
-}
-
-func shortDescription(str string) string {
-	reg := regexp.MustCompile("[\n\r]+")
-	str = reg.ReplaceAllString(str, " ")
-	if len(str) > 120 {
-		s := []string{str[0:120], "..."}
-		return strings.Join(s, "")
-	}
-	return str
 }

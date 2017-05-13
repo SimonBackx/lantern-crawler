@@ -266,7 +266,7 @@ func (w *Hostworker) Run(client *http.Client) {
 		w.crawler.waitGroup.Done()
 
 		// Onze crawler terug wakker maken om eventueel een nieuwe request op te starten
-		w.crawler.WorkerEnded <- w
+		w.crawler.WorkerEnded.stack(w)
 	}()
 
 	if w.crawler.cfg.LogGoroutinesEnabled {
@@ -499,7 +499,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 				break
 			}
 
-			if !strings.HasPrefix(u.Scheme, "http") {
+			if !strings.HasPrefix(u.Scheme, "http") || len(u.Host) == 0 {
 				break
 			}
 
@@ -561,7 +561,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 
 		// Doorgeven aan crawler en aan juiste worker bezorgen voor verdere afhandeling?
 		workerResult.Append(&cc)
-		w.crawler.WorkerResult <- workerResult
+		w.crawler.WorkerResult.stack(workerResult)
 
 		return false
 	}
@@ -571,7 +571,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 
 	// Resultaat doorgeven aan Crawler
 	if len(workerResult.Links) > 0 {
-		w.crawler.WorkerResult <- workerResult
+		w.crawler.WorkerResult.stack(workerResult)
 	}
 
 	w.RequestFinished(item)
@@ -597,7 +597,7 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 			w.IntroductionPoints.Push(item)
 
 			// Crawler verwittigen zodat we op de recrawl lijst komen
-			w.crawler.WorkerIntroduction <- w
+			w.crawler.WorkerIntroduction.stack(w)
 		} else {
 			if w.IntroductionPoints.Length < 10 {
 				w.IntroductionPoints.Push(item)
@@ -686,6 +686,8 @@ func splitUrlRelative(absolute *url.URL) *url.URL {
 	absolute.Host = ""
 	absolute.User = nil
 	absolute.ForceQuery = false
+	// Query newslines en tabs verwijderen
+	absolute.RawQuery = strings.Replace(strings.Replace(absolute.RawQuery, "\n", "", -1), "\t", "", -1)
 
 	return &domain
 }
@@ -695,6 +697,9 @@ func makeRelative(absolute *url.URL) {
 	absolute.Host = ""
 	absolute.User = nil
 	absolute.ForceQuery = false
+	// Query newslines en tabs verwijderen
+	absolute.RawQuery = strings.Replace(strings.Replace(absolute.RawQuery, "\n", "", -1), "\t", "", -1)
+
 }
 
 /**

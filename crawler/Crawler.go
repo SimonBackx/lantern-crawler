@@ -37,9 +37,9 @@ type Crawler struct {
 	// General update timer
 	UpdateTimer <-chan time.Time
 
-	WorkerEnded        chan *Hostworker
-	WorkerResult       chan *WorkerResult
-	WorkerIntroduction chan *Hostworker
+	WorkerEnded        WorkerChannel
+	WorkerResult       WorkerResultChannel
+	WorkerIntroduction WorkerChannel
 
 	// Waitgroup die we gebruiken als we op alle requests willen wachten
 	waitGroup   sync.WaitGroup
@@ -70,9 +70,9 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 		Workers:            make(map[string]*Hostworker),
 		SleepingCrawlers:   NewWorkerList(),
 		RecrawlList:        NewWorkerList(),
-		WorkerEnded:        make(chan *Hostworker, 1),
-		WorkerResult:       make(chan *WorkerResult, 1),
-		WorkerIntroduction: make(chan *Hostworker, 1),
+		WorkerEnded:        NewWorkerChannel(),
+		WorkerResult:       NewWorkerResultChannel(),
+		WorkerIntroduction: NewWorkerChannel(),
 		speedLogger:        NewSpeedLogger(),
 		Stop:               make(chan struct{}, 1),
 		RecrawlTimer:       make(<-chan time.Time, 1),
@@ -329,38 +329,40 @@ func (crawler *Crawler) Start(signal chan int) {
 
 	for {
 		select {
-		case worker := <-crawler.WorkerEnded:
-			if crawler.cfg.LogGoroutinesEnabled {
-				crawler.cfg.LogInfo("Goroutine for host " + worker.String() + " stopped")
+		case workers := <-crawler.WorkerEnded:
+			for _, worker := range workers {
+				if crawler.cfg.LogGoroutinesEnabled {
+					crawler.cfg.LogInfo("Goroutine for host " + worker.String() + " stopped")
+				}
+
+				worker.Running = false
+
+				if worker.RecrawlOnFinish {
+					worker.RecrawlOnFinish = false
+					worker.Recrawl()
+				}
+
+				// Pending items aan queue toevoegen, als die er nog zijn
+				// zodat we zeker zijn dat de queue leeg is
+
+				// De worker die is gaan slapen terug toevoegen
+				// als die nog items heeft, anders stellen we dit uit tot we weer items vinden
+				if worker.WantsToGetUp() {
+					worker.Sleeping = true
+					crawler.SleepingCrawlers.Push(worker)
+				} else {
+					// todo: toevoegen aan completeFails?
+				}
+
+				// Een worker heeft zich afgesloten
+				crawler.distributor.FreeClient(worker.Client)
+				worker.Client = nil
 			}
-
-			worker.Running = false
-
-			if worker.RecrawlOnFinish {
-				worker.RecrawlOnFinish = false
-				worker.Recrawl()
-			}
-
-			// Pending items aan queue toevoegen, als die er nog zijn
-			// zodat we zeker zijn dat de queue leeg is
-
-			// De worker die is gaan slapen terug toevoegen
-			// als die nog items heeft, anders stellen we dit uit tot we weer items vinden
-			if worker.WantsToGetUp() {
-				worker.Sleeping = true
-				crawler.SleepingCrawlers.Push(worker)
-			} else {
-				// todo: toevoegen aan completeFails?
-			}
-
-			// Een worker heeft zich afgesloten
-			crawler.distributor.FreeClient(worker.Client)
-			worker.Client = nil
 
 			crawler.WakeSleepingWorkers()
 
 		case result := <-crawler.WorkerResult:
-			// Resultaat van een worker verwerken
+			// Resultaat van een of meerdere workers verwerken
 
 			// 1. URL's
 			for _, url := range result.Links {
@@ -372,9 +374,11 @@ func (crawler *Crawler) Start(signal chan int) {
 			// Kunnen we nieuwe workers wakker maken?
 			crawler.WakeSleepingWorkers()
 
-		case worker := <-crawler.WorkerIntroduction:
-			if !worker.InRecrawlList {
-				crawler.AddRecrawlList(worker)
+		case workers := <-crawler.WorkerIntroduction:
+			for _, worker := range workers {
+				if !worker.InRecrawlList {
+					crawler.AddRecrawlList(worker)
+				}
 			}
 
 		case <-crawler.UpdateTimer:
