@@ -240,7 +240,7 @@ func (i *CrawlItem) SaveToString() string {
 	if i.Subdomain != nil {
 		index = i.Subdomain.Index
 	}
-	if i.URL.IsAbs() || len(i.URL.Host) > 0 {
+	if i.URL.IsAbs() {
 		fmt.Println("CrawlItem url became absolute")
 	}
 	return fmt.Sprintf("%s	%v	%v	%v	%v	%s	%s	%v", i.URL, i.Depth, i.Cycle, i.Ignore, i.FailCount, TimeToString(i.LastDownload), TimeToString(i.LastDownloadStarted), index)

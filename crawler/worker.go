@@ -425,7 +425,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				return
 			} else if strings.Contains(str, "server gave HTTP response to HTTPS client") {
 				w.Scheme = "http"
-				item.URL.Scheme = "http"
+				// todo: fix subdomain?
 			} else if strings.Contains(str, "context canceled") {
 				// Negeer failcount bij handmatige cancel
 				item.FailCount--
@@ -467,6 +467,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 		w.Scheme = "http"
 	}
 
+	// tijdelijk absolute url toelaten!!!!!! -> makeRelative(item.URL) noodzakelijk achteraan
 	item.URL = response.Request.URL
 
 	// Save results
@@ -551,15 +552,22 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 
 	// Kritieke move operatie uitvoeren noodzakelijk?
 	if w.crawler.GetDomainForUrl(item.URL, strings.Split(item.URL.Host, ".")) != w.Host {
+		// Kopie maken van volledige absolute url en dan pas relatief maken
+		cc := *item.URL
+		makeRelative(item.URL)
+
 		// Negeren vanaf nu voor deze worker
 		w.RequestIgnored(item)
 
 		// Doorgeven aan crawler en aan juiste worker bezorgen voor verdere afhandeling?
-		workerResult.Append(item.URL)
+		workerResult.Append(&cc)
 		w.crawler.WorkerResult <- workerResult
 
 		return false
 	}
+
+	// Relatief maken
+	makeRelative(item.URL)
 
 	// Resultaat doorgeven aan Crawler
 	if len(workerResult.Links) > 0 {
@@ -693,6 +701,10 @@ func makeRelative(absolute *url.URL) {
  * Als internal = false mag sourceItem = nil
  */
 func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, internal bool) (*CrawlItem, error) {
+	// Create copy
+	cc := *foundUrl
+	foundUrl = &cc
+
 	if !w.InMemory {
 		count := w.NewItems.stack(foundUrl)
 		if count > 100 {
