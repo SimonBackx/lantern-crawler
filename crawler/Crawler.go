@@ -93,6 +93,8 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 		return crawler
 	}
 
+	cfg.LogInfo("Loading hosts from disk...")
+
 	// Read from files
 	files, _ := ioutil.ReadDir("./progress")
 	for _, f := range files {
@@ -119,6 +121,7 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 			}
 		}
 	}
+	cfg.LogInfo("Done.")
 
 	return crawler
 }
@@ -295,7 +298,9 @@ func (crawler *Crawler) Quit() {
 	if crawler.cfg.SaveToFiles {
 		crawler.cfg.LogInfo("Saving progress...")
 		for _, worker := range crawler.Workers {
-			worker.SaveToFile()
+			if worker.NeedsWriteToDisk() {
+				worker.MoveToDisk()
+			}
 		}
 	} else {
 		crawler.cfg.LogInfo("Progress saving disabled (cfg.SaveToFiles = false).")

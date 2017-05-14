@@ -15,7 +15,7 @@ func run(quit chan bool, finished chan bool) {
 		UseTorProxy:   false,
 		OnlyOnion:     false,
 		LoadFromFiles: true,
-		SaveToFiles:   false,
+		SaveToFiles:   true,
 		//MaxDomains:    10000,
 
 		LogRecrawlingEnabled: false,

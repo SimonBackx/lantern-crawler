@@ -20,14 +20,14 @@ type ParseResult struct {
 }*/
 
 // Momenteel nog geen return value, dat is voor later
-func Parse(reader io.Reader, queryList []queries.Query) (*ParseResult, error) {
+func Parse(reader io.Reader, queryList []queries.Query, parseUrls bool) (*ParseResult, error) {
 	data, err := ioutil.ReadAll(reader)
 
 	if err != nil {
 		return nil, err
 	}
 	document := string(data[:])
-	result := ReadHtml(data)
+	result := ReadHtml(data, parseUrls)
 	// Vanaf nu zijn alle tags etc uit data gefilterd en door lege characters
 	// vervangen
 
@@ -43,7 +43,7 @@ func Parse(reader io.Reader, queryList []queries.Query) (*ParseResult, error) {
 	return result, nil
 }
 
-func ReadHtml(data []byte) *ParseResult {
+func ReadHtml(data []byte, parseUrls bool) *ParseResult {
 	reader := NewPositionReader(bytes.NewReader(data))
 
 	head_depth := 0
@@ -90,23 +90,24 @@ func ReadHtml(data []byte) *ParseResult {
 			tn, _ := z.TagName()
 
 			if len(tn) == 1 && tn[0] == 'a' {
-				key, val, moreAttr := z.TagAttr()
-				for key != nil {
+				if parseUrls {
+					key, val, moreAttr := z.TagAttr()
+					for key != nil {
 
-					if string(key) == "href" {
-						attrUrl, _ := ParseUrlFromHref(val)
-						if attrUrl != nil {
-							result.Urls = append(result.Urls, attrUrl)
+						if string(key) == "href" {
+							attrUrl := ParseUrlFromHref(val)
+							if attrUrl != nil {
+								result.Urls = append(result.Urls, attrUrl)
+							}
+							break
 						}
-						break
-					}
 
-					if !moreAttr {
-						break
+						if !moreAttr {
+							break
+						}
+						key, val, moreAttr = z.TagAttr()
 					}
-					key, val, moreAttr = z.TagAttr()
 				}
-
 			} else if string(tn) == "head" {
 				head_depth++
 			} else if head_depth > 0 && string(tn) == "title" {
@@ -133,7 +134,7 @@ func ReadHtml(data []byte) *ParseResult {
 	return result
 }
 
-func ParseUrlFromHref(href []byte) (*url.URL, error) {
+func ParseUrlFromHref(href []byte) *url.URL {
 	startIndex := 0
 	endIndex := len(href) - 1
 
@@ -146,13 +147,19 @@ func ParseUrlFromHref(href []byte) (*url.URL, error) {
 	}
 
 	if startIndex >= endIndex+1 || startIndex >= len(href) || endIndex < 0 {
-		return nil, nil
+		return nil
 	}
 
 	u, err := url.Parse(string(href[startIndex : endIndex+1]))
 	if err != nil {
-		return u, err
+		return nil
 	}
+
+	if len(u.Path) > 500 || len(u.RawQuery) > 500 {
+		// Te lang, wrs gewoon onzinnige data
+		return nil
+	}
+
 	u.Fragment = ""
-	return u, err
+	return u
 }

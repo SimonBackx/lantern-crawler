@@ -182,7 +182,10 @@ func NewCrawlItemFromString(str *string, subdomains []*Subdomain) *CrawlItem {
 }
 
 func (i *CrawlItem) String() string {
-	return i.URL.EscapedPath()
+	if i.Subdomain == nil {
+		return i.URL.String()
+	}
+	return i.Subdomain.Url.String() + i.URL.String()
 }
 
 func (i *CrawlItem) IsUnavailable() bool {

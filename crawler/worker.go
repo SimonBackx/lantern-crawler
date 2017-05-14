@@ -17,6 +17,7 @@ import (
 )
 
 const maxRecrawlDepth = 3
+const maxCrawlDepth = 20
 
 type Subdomain struct {
 	Url           *url.URL
@@ -27,6 +28,7 @@ type Subdomain struct {
 type Hostworker struct {
 	Host   string // Domain without subdomains!
 	Scheme string // Migrate automatically external domains?
+	Ignore bool
 
 	// Lijst met items die opnieuw moeten worden gecrawld met depth >= maxRecrawlDepth
 	// Een item mag hier maximum 1 maand in verblijven (= vernieuwings interval)
@@ -111,6 +113,7 @@ func NewHostWorkerFromFile(file *os.File, crawler *Crawler) *Hostworker {
 	reader := bufio.NewReader(file)
 	w := NewHostworker("", crawler)
 	w.ReadFromReader(reader)
+	w.HardReset()
 	return w
 }
 
@@ -119,6 +122,30 @@ func (w *Hostworker) MoveToDisk() {
 	if !w.SaveToFile() {
 		return
 	}
+	w.InMemory = false
+	w.IntroductionPoints = nil
+	w.Subdomains = nil
+	w.PriorityQueue = nil
+	w.LowPriorityQueue = nil
+	w.Queue = nil
+	w.FailedQueue = nil
+}
+
+/// Move out of memory without save to file
+func (w *Hostworker) HardReset() {
+	w.cachedWantsToGetUp = w.WantsToGetUp()
+	w.InMemory = false
+	w.IntroductionPoints = nil
+	w.Subdomains = nil
+	w.PriorityQueue = nil
+	w.LowPriorityQueue = nil
+	w.Queue = nil
+	w.FailedQueue = nil
+}
+
+// Ignore = ignore for 1 month (domain probably down)
+func (w *Hostworker) SetIgnored() {
+	w.Ignore = true
 	w.InMemory = false
 	w.IntroductionPoints = nil
 	w.Subdomains = nil
@@ -144,17 +171,6 @@ func (w *Hostworker) MoveToMemory() {
 	if !w.ReadFromReader(bufio.NewReader(file)) {
 		panic("Coudn't move to memory: file not readable")
 	}
-}
-
-func (w *Hostworker) FillAlreadyVisited(q *CrawlQueue) {
-	/*item := q.First
-	for item != nil {
-		uri, err := cleanURLPath(*item.URL)
-		if err == nil {
-			w.AlreadyVisited[item.URL.Hostname()][uri] = item
-		}
-		item = item.Next
-	}*/
 }
 
 func (w *Hostworker) GetRecrawlDuration() time.Duration {
@@ -199,7 +215,28 @@ func (w *Hostworker) EmptyPendingItems() {
 	}
 }
 
+func (w *Hostworker) NeedsWriteToDisk() bool {
+	if w.InMemory {
+		// Nieuwe host die nog nooit aan de beurt is gekomen
+		return true
+	} else {
+		select {
+		case q := <-w.NewItems:
+			w.MoveToMemory()
+			w.AddQueue(q)
+			return true
+		default:
+			break
+		}
+	}
+	return false
+}
+
 func (w *Hostworker) WantsToGetUp() bool {
+	if w.Ignore {
+		return false
+	}
+
 	if !w.InMemory {
 		return w.cachedWantsToGetUp
 	}
@@ -280,8 +317,7 @@ func (w *Hostworker) Run(client *http.Client) {
 
 	w.Client = client
 
-	// Snel horizontaal uitbreiden: neem laag getal
-	w.sleepAfter = 10 + rand.Intn(100) //rand.Intn(4) + 6
+	w.sleepAfter = 10 + rand.Intn(50)
 
 	if !w.InMemory {
 		w.MoveToMemory()
@@ -313,7 +349,8 @@ func (w *Hostworker) Run(client *http.Client) {
 				// Meteen stoppen
 				return
 			}
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(4000)+2000))
+
+			time.Sleep(time.Millisecond * time.Duration(4000+rand.Intn(4000)))
 
 		}
 	}
@@ -430,7 +467,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				return
 			} else if strings.Contains(str, "server gave HTTP response to HTTPS client") {
 				w.Scheme = "http"
-				// todo: fix subdomain?
+				item.Subdomain.Url.Scheme = "http"
 			} else if strings.Contains(str, "context canceled") {
 				// Negeer failcount bij handmatige cancel
 				item.FailCount--
@@ -454,7 +491,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 
 func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, reader io.Reader) bool {
 	// Doorgeven aan parser
-	result, err := Parse(reader, w.crawler.Queries)
+	result, err := Parse(reader, w.crawler.Queries, item.Depth < maxCrawlDepth)
 
 	if err != nil {
 		if err.Error() == "Reader reached maximum bytes!" {
@@ -609,9 +646,8 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 			} else {
 				// Check of de url een hoofd url is
 				if item.URL.String() == "/" {
+					// todo: misschien tot bepaalde lengte of aantal '/' toestaan?
 					w.IntroductionPoints.Push(item)
-					w.crawler.cfg.LogInfo("Introduction point toch gepusht, ondanks lengte")
-					w.IntroductionPoints.PrintQueue()
 				}
 			}
 		}
@@ -640,6 +676,11 @@ func (w *Hostworker) RequestFailed(item *CrawlItem) {
 		if w.FailStreak > 3 {
 			// Meteen stoppen
 			w.sleepAfter = -1
+		}
+
+		if w.FailStreak > 6 {
+			// Volledig negeren
+			// todo
 		}
 	}
 
@@ -724,7 +765,7 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 
 	if !w.InMemory {
 		count := w.NewItems.stack(foundUrl)
-		if count > 100 {
+		if count > 50 {
 			w.cachedWantsToGetUp = true
 		}
 		return nil, nil

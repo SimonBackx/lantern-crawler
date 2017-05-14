@@ -20,8 +20,14 @@ func newPopChannel() popChannel {
 // to an infinitely buffered channel).
 // Returns the current length of the stack
 func (pc popChannel) stack(item *url.URL) int {
-	arr := []*url.URL{item}
+	return pc.stackSlice([]*url.URL{item})
+}
 
+// The stack function ensures the specified URLs are added to the pop channel
+// with minimal blocking (since the channel is stacked, it is virtually equivalent
+// to an infinitely buffered channel).
+// Returns the current length of the stack
+func (pc popChannel) stackSlice(arr []*url.URL) int {
 	for {
 		select {
 		case pc <- arr:
