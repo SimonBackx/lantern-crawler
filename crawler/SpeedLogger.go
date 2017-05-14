@@ -3,6 +3,7 @@ package crawler
 import (
 	"fmt"
 	"github.com/SimonBackx/lantern-crawler/queries"
+	"runtime"
 	"time"
 )
 
@@ -24,6 +25,8 @@ func NewSpeedLogger() *SpeedLogger {
 
 func (logger *SpeedLogger) Run() {
 	//var previousTime *time.Time
+	var m runtime.MemStats
+
 	for {
 		_, ok := <-logger.Ticker.C
 		if !ok {
@@ -36,12 +39,12 @@ func (logger *SpeedLogger) Run() {
 		domains := len(logger.Crawler.Workers)
 		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v requests, %v workers, %v domains", int(requests/60), workers, domains))
 
-		downloadSpeed := int(float64(logger.DownloadSize) / 60000) // * 6
+		downloadSpeed := int(float64(logger.DownloadSize) / 60 / 1024) // * 6
 		downloadSize := 0
 		downloadTime := 0
 
 		if logger.Count > 0 {
-			downloadSize = int(float64(logger.DownloadSize) / 1000 / float64(logger.Count))
+			downloadSize = int(float64(logger.DownloadSize) / 1024 / float64(logger.Count))
 			downloadTime = int(logger.DownloadTime.Seconds() * 1000 / float64(logger.Count))
 
 			logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v KB/s, %v KB/page, %v ms/page, %v timeouts",
@@ -51,6 +54,9 @@ func (logger *SpeedLogger) Run() {
 				logger.Timeouts,
 			))
 		}
+
+		runtime.ReadMemStats(&m)
+		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("\nAlloc = %v KB, Sys = %v KB", m.Alloc/1024, m.Sys/1024))
 
 		// Als er veel timeouts zijn -> vertragen
 		if logger.Timeouts > 60 && logger.Crawler.distributor.AvailableClients() >= 0 {

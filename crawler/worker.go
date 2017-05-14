@@ -257,6 +257,11 @@ func (w *Hostworker) Recrawl() {
 
 func (w *Hostworker) Run(client *http.Client) {
 	defer func() {
+		if e := recover(); e != nil {
+			//log and so other stuff
+			w.crawler.cfg.Log("Panic", identifyPanic())
+		}
+
 		if w.InMemory {
 			w.EmptyPendingItems()
 			w.MoveToDisk()
@@ -541,7 +546,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 				}
 			}
 
-			if w.crawler.GetDomainForUrl(u, domains) == w.Host {
+			if w.crawler.GetDomainForUrl(domains) == w.Host {
 				// Interne URL's meteen verwerken
 				w.NewReference(u, item, true)
 			} else {
@@ -551,7 +556,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 	}
 
 	// Kritieke move operatie uitvoeren noodzakelijk?
-	if w.crawler.GetDomainForUrl(item.URL, strings.Split(item.URL.Host, ".")) != w.Host {
+	if w.crawler.GetDomainForUrl(strings.Split(item.URL.Host, ".")) != w.Host {
 		// Kopie maken van volledige absolute url en dan pas relatief maken
 		cc := *item.URL
 		makeRelative(item.URL)
@@ -601,6 +606,13 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 		} else {
 			if w.IntroductionPoints.Length < 10 {
 				w.IntroductionPoints.Push(item)
+			} else {
+				// Check of de url een hoofd url is
+				if item.URL.String() == "/" {
+					w.IntroductionPoints.Push(item)
+					w.crawler.cfg.LogInfo("Introduction point toch gepusht, ondanks lengte")
+					w.IntroductionPoints.PrintQueue()
+				}
 			}
 		}
 	}
@@ -687,7 +699,7 @@ func splitUrlRelative(absolute *url.URL) *url.URL {
 	absolute.User = nil
 	absolute.ForceQuery = false
 	// Query newslines en tabs verwijderen
-	absolute.RawQuery = strings.Replace(strings.Replace(absolute.RawQuery, "\n", "", -1), "\t", "", -1)
+	absolute.RawQuery = strings.Replace(strings.Replace(absolute.RawQuery, "\n", "%0A", -1), "\t", "%09", -1)
 
 	return &domain
 }
@@ -698,7 +710,7 @@ func makeRelative(absolute *url.URL) {
 	absolute.User = nil
 	absolute.ForceQuery = false
 	// Query newslines en tabs verwijderen
-	absolute.RawQuery = strings.Replace(strings.Replace(absolute.RawQuery, "\n", "", -1), "\t", "", -1)
+	absolute.RawQuery = strings.Replace(strings.Replace(absolute.RawQuery, "\n", "%0A", -1), "\t", "%09", -1)
 
 }
 
@@ -713,9 +725,7 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 	if !w.InMemory {
 		count := w.NewItems.stack(foundUrl)
 		if count > 100 {
-			w.crawler.cfg.LogInfo("Host loaded to memory because of large newitems stack")
-			w.MoveToMemory()
-			w.EmptyPendingItems()
+			w.cachedWantsToGetUp = true
 		}
 		return nil, nil
 	}
@@ -833,7 +843,7 @@ func (w *Hostworker) ReadFromReader(reader *bufio.Reader) bool {
 		return false
 	}
 	str := string(line)
-	parts := strings.Split(str, "	")
+	parts := strings.Split(str, "\t")
 	if len(parts) != 5 {
 		return false
 	}
@@ -988,6 +998,10 @@ func (w *Hostworker) IsEqual(b *Hostworker) bool {
 			return false
 		}
 
+		if len(subdomain.AlreadyVisted) != len(otherSub.AlreadyVisted) {
+			return false
+		}
+
 		for key, value := range subdomain.AlreadyVisted {
 			other, found := otherSub.AlreadyVisted[key]
 			if !found {
@@ -999,21 +1013,6 @@ func (w *Hostworker) IsEqual(b *Hostworker) bool {
 			}
 		}
 	}
-
-	// todo: already visited checken!
-	/*if len(w.AlreadyVisited) != len(b.AlreadyVisited) {
-		return false
-	}
-
-	for key, value := range w.AlreadyVisited {
-		other, found := b.AlreadyVisited[key]
-		if !found {
-			return false
-		}
-		if !value.IsEqual(other) {
-			return false
-		}
-	}*/
 
 	return true
 }

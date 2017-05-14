@@ -132,7 +132,7 @@ func (crawler *Crawler) RefreshQueries() {
 	crawler.Queries = queries
 }
 
-func (crawler *Crawler) GetDomainForUrl(u *url.URL, splitted []string) string {
+func (crawler *Crawler) GetDomainForUrl(splitted []string) string {
 	if crawler.cfg.OnlyOnion {
 		return splitted[len(splitted)-2]
 	} else {
@@ -141,7 +141,7 @@ func (crawler *Crawler) GetDomainForUrl(u *url.URL, splitted []string) string {
 }
 
 func (crawler *Crawler) ProcessUrl(u *url.URL) {
-	host := crawler.GetDomainForUrl(u, strings.Split(u.Host, "."))
+	host := crawler.GetDomainForUrl(strings.Split(u.Host, "."))
 	worker := crawler.Workers[host]
 
 	if worker == nil {
