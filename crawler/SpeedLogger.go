@@ -56,7 +56,9 @@ func (logger *SpeedLogger) Run() {
 		}
 
 		runtime.ReadMemStats(&m)
-		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("\nAlloc = %v KB, Sys = %v KB", m.Alloc/1024, m.Sys/1024))
+		memoryAlloc := m.Alloc / 1024
+		memorySys := m.Sys / 1024
+		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("Alloc = %v KB, Sys = %v KB", memoryAlloc, memorySys))
 
 		// Als er veel timeouts zijn -> vertragen
 		if logger.Timeouts > 60 && logger.Crawler.distributor.AvailableClients() >= 0 {
@@ -65,7 +67,7 @@ func (logger *SpeedLogger) Run() {
 			logger.Crawler.distributor.IncreaseClients()
 		}
 
-		stats := queries.NewStats(logger.Count, logger.Timeouts, workers, domains, downloadSpeed, downloadTime, downloadSize)
+		stats := queries.NewStats(logger.Count, logger.Timeouts, workers, domains, downloadSpeed, downloadTime, downloadSize, memoryAlloc, memorySys)
 		logger.Crawler.ApiController.SaveStats(stats)
 
 		logger.Count = 0
