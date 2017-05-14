@@ -18,6 +18,7 @@ import (
 
 const maxRecrawlDepth = 3
 const maxCrawlDepth = 20
+const maxFileSize = 2000000
 
 type Subdomain struct {
 	Url           *url.URL
@@ -28,7 +29,6 @@ type Subdomain struct {
 type Hostworker struct {
 	Host   string // Domain without subdomains!
 	Scheme string // Migrate automatically external domains?
-	Ignore bool
 
 	// Lijst met items die opnieuw moeten worden gecrawld met depth >= maxRecrawlDepth
 	// Een item mag hier maximum 1 maand in verblijven (= vernieuwings interval)
@@ -143,18 +143,6 @@ func (w *Hostworker) HardReset() {
 	w.FailedQueue = nil
 }
 
-// Ignore = ignore for 1 month (domain probably down)
-func (w *Hostworker) SetIgnored() {
-	w.Ignore = true
-	w.InMemory = false
-	w.IntroductionPoints = nil
-	w.Subdomains = nil
-	w.PriorityQueue = nil
-	w.LowPriorityQueue = nil
-	w.Queue = nil
-	w.FailedQueue = nil
-}
-
 func (w *Hostworker) MoveToMemory() {
 	file, err := os.Open("./progress/host_" + w.Host + ".txt")
 	if err != nil {
@@ -233,10 +221,6 @@ func (w *Hostworker) NeedsWriteToDisk() bool {
 }
 
 func (w *Hostworker) WantsToGetUp() bool {
-	if w.Ignore {
-		return false
-	}
-
 	if !w.InMemory {
 		return w.cachedWantsToGetUp
 	}
@@ -379,6 +363,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				if response.StatusCode == 429 {
 					w.sleepAfter = -1
 					w.crawler.cfg.Log("WARNING", "Too many requests for host "+w.String())
+					item.FailCount--
 					w.RequestFailed(item)
 					return
 				}
@@ -406,7 +391,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			startTime := time.Now()
 
 			// Maximaal 2MB (pagina's in darkweb zijn gemiddeld erg groot vanwege de afbeeldingen)
-			if response.ContentLength > 2000000 {
+			if response.ContentLength > maxFileSize {
 				//w.crawler.cfg.LogInfo("Response: Content too long")
 				// Too big
 				// Eventueel op een ignore list zetten
@@ -437,7 +422,7 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			firstReader := bytes.NewReader(b)
 
 			// De twee readers terug samenvoegen
-			reader := NewCountingReader(io.MultiReader(firstReader, response.Body), 2000000)
+			reader := NewCountingReader(io.MultiReader(firstReader, response.Body), maxFileSize)
 			if w.ProcessResponse(item, response, reader) {
 				duration := time.Since(startTime)
 				w.crawler.speedLogger.Log(duration, reader.Size)
@@ -676,11 +661,6 @@ func (w *Hostworker) RequestFailed(item *CrawlItem) {
 		if w.FailStreak > 3 {
 			// Meteen stoppen
 			w.sleepAfter = -1
-		}
-
-		if w.FailStreak > 6 {
-			// Volledig negeren
-			// todo
 		}
 	}
 

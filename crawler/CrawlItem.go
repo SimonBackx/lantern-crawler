@@ -204,8 +204,8 @@ func (i *CrawlItem) NeedsRetry() bool {
 	}
 
 	if i.FailCount == 1 {
-		// Meteen opnieuw proberen
-		return true
+		// Opnieuw proberen na 1 minuut
+		return time.Since(*i.LastDownloadStarted) > 1*time.Minute
 	}
 
 	// n = maxFailCount - 1
@@ -215,9 +215,7 @@ func (i *CrawlItem) NeedsRetry() bool {
 	// Het duurt 1 maand voor een request verwijderd wordt als we deze formule gebruiken
 	// Deze exponentiele retry tijd is enkel mogelijk dankzij de leveledQueue
 	// Op die manier kunnen we het sorteren van items vermijden
-	answer := time.Since(*i.LastDownloadStarted) > time.Duration(math.Pow(8.3, float64(i.FailCount-1)))*time.Minute //time.Hour
-
-	return answer
+	return time.Since(*i.LastDownloadStarted) > time.Duration(math.Pow(8.3, float64(i.FailCount-1)))*time.Minute //time.Hour
 }
 
 /**
