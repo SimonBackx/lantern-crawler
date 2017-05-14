@@ -31,11 +31,19 @@ func NewTor() *Tor {
 			"--RunAsDaemon", "1",
 			"--SocksPort", addr,
 			"--ControlPort", addr2,
-			//"--CookieAuthentication", "0",
-			//"--HashedControlPassword", "",
-			//"--PidFile", fmt.Sprintf("/progress/tor%v.pid", i),
 			"--DataDirectory", dir,
+
+			// Random password to disable control port access
+			"--HashedControlPassword", "16:118E516CCAA79CF76014434BD85092BE8E34C6D0D7594C2F5D4093F78B",
+
+			// Disable routing
+			"--ClientOnly", "1",
+			"--MaxCircuitDirtiness", "120", // Maximum seconden om tor circuit te hergebruiken
+			"--OnionTrafficOnly", "1",
+			"--SafeSocks", "1", // Voorkom dns leaks.
 		)
+
+		//tor --RunAsDaemon 1 --SocksPort 9150 --ControlPort 9180 --DataDirectory "/tor_dir/tor1" --HashedControlPassword "16:118E516CCAA79CF76014434BD85092BE8E34C6D0D7594C2F5D4093F78B" --ClientOnly 1
 
 		if err != nil {
 			fmt.Println("ERROR LAUNCHING tor: " + err.Error())
