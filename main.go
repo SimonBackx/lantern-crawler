@@ -55,10 +55,9 @@ func main() {
 	flag.Parse()
 
 	svcConfig := &service.Config{
-		Name:        "Lantern-crawler",
-		DisplayName: "Lantern-crawler",
+		Name:        "lanterncrawler",
+		DisplayName: "Lantern-Crawler",
 		Description: "Cyber threat collection in the darkweb",
-		UserName:    "lantern",
 	}
 
 	prg := &program{}

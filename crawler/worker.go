@@ -95,8 +95,8 @@ func (w *Hostworker) String() string {
  * als we de recrawl queue opnieuw crawlen.
  */
 func (w *Hostworker) SaveToFile() bool {
-	os.Mkdir("progress", 0777)
-	file, err := os.Create("./progress/host_" + w.Host + ".txt")
+	os.Mkdir("/etc/lantern/hosts", 0777)
+	file, err := os.Create("/etc/lantern/hosts/host_" + w.Host + ".txt")
 	if err != nil {
 		w.crawler.cfg.LogError(err)
 		return false
@@ -146,7 +146,7 @@ func (w *Hostworker) HardReset() {
 }
 
 func (w *Hostworker) MoveToMemory() {
-	file, err := os.Open("./progress/host_" + w.Host + ".txt")
+	file, err := os.Open("/etc/lantern/hosts/host_" + w.Host + ".txt")
 	if err != nil {
 		panic("Coudn't move to memory: file not found")
 	}

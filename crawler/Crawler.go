@@ -95,14 +95,14 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 	cfg.LogInfo("Loading hosts from disk...")
 
 	// Read from files
-	files, _ := ioutil.ReadDir("./progress")
+	files, _ := ioutil.ReadDir("/etc/lantern/hosts")
 	for _, f := range files {
 		if strings.HasPrefix(f.Name(), ".") {
 			// Hidden files negeren
 			continue
 		}
 
-		file, err := os.Open("./progress/" + f.Name())
+		file, err := os.Open("/etc/lantern/hosts/" + f.Name())
 		if err != nil {
 			cfg.LogError(err)
 			continue
