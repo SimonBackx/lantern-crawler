@@ -8,12 +8,13 @@ import (
 
 /// All supported basic actions
 type RegexpQuery struct {
-	Regexp *regexp.Regexp
+	Regexp   *regexp.Regexp
+	original string
 }
 
 func (o *RegexpQuery) MarshalJSON() ([]byte, error) {
 	m := make(map[string]string)
-	m["regexp"] = o.Regexp.String()
+	m["regexp"] = o.original
 	m["type"] = "regexp"
 	return json.Marshal(m)
 }
@@ -30,16 +31,12 @@ func (o *RegexpQuery) UnmarshalJSON(b []byte) error {
 		return fmt.Errorf("Empty regexp not allowed")
 	}
 
-	o.Regexp, err = regexp.Compile(objMap["regexp"])
+	o.original = objMap["regexp"]
+	o.Regexp, err = regexp.Compile("(?i)" + objMap["regexp"])
 	if err != nil {
 		return err
 	}
 	return nil
-}
-
-func NewRegexpQuery(str string) *RegexpQuery {
-	reg := regexp.MustCompile(str)
-	return &RegexpQuery{Regexp: reg}
 }
 
 func (a *RegexpQuery) Execute(s *Source) [][]int {

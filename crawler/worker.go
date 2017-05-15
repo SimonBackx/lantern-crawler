@@ -657,7 +657,7 @@ func (w *Hostworker) RequestIgnored(item *CrawlItem) {
 }
 
 func (w *Hostworker) RequestFailed(item *CrawlItem) {
-	w.crawler.cfg.LogInfo(fmt.Sprintf("Request failed. %v", item.URL.String()))
+	//w.crawler.cfg.LogInfo(fmt.Sprintf("Request failed. %v", item.URL.String()))
 
 	item.FailCount++
 

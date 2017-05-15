@@ -10,9 +10,10 @@ import (
 )
 
 type ParseResult struct {
-	Urls    []*url.URL
-	Results []*queries.Result
-	Title   *string
+	Urls       []*url.URL
+	Results    []*queries.Result
+	Title      *string
+	Lowercased []byte
 }
 
 /*func byteArrayToString(b []byte) string {
@@ -26,18 +27,19 @@ func Parse(reader io.Reader, queryList []queries.Query, parseUrls bool) (*ParseR
 	if err != nil {
 		return nil, err
 	}
-	document := string(data[:])
 	result := ReadHtml(data, parseUrls)
-	// Vanaf nu zijn alle tags etc uit data gefilterd en door lege characters
-	// vervangen
 
 	// Queries op uitvoeren
-
-	source := queries.NewSource(data)
+	source := queries.NewSource(result.Lowercased)
+	var dataStr *string
 	for _, query := range queryList {
 		snippet := query.Execute(source)
 		if snippet != nil {
-			apiResult := queries.NewResult(query, nil, nil, &document, result.Title, snippet)
+			if dataStr == nil {
+				str := string(data)
+				dataStr = &str
+			}
+			apiResult := queries.NewResult(query, nil, nil, dataStr, result.Title, snippet)
 			result.Results = append(result.Results, apiResult)
 		}
 	}
@@ -48,6 +50,8 @@ func Parse(reader io.Reader, queryList []queries.Query, parseUrls bool) (*ParseR
 func ReadHtml(data []byte, parseUrls bool) *ParseResult {
 	reader := NewPositionReader(bytes.NewReader(data))
 
+	lowercased := bytes.NewBuffer(make([]byte, 0, len(data)/2))
+
 	head_depth := 0
 	title_depth := 0
 	var title string
@@ -55,7 +59,6 @@ func ReadHtml(data []byte, parseUrls bool) *ParseResult {
 
 	z := html.NewTokenizer(reader)
 
-	previousEnd := 0
 	ignore_depth := 0
 
 	for {
@@ -64,13 +67,15 @@ func ReadHtml(data []byte, parseUrls bool) *ParseResult {
 		// opgeslagen moeten worden is een kopie noodzakelijk
 		switch tt {
 		case html.ErrorToken:
-			// Al de rest nog wissen
-			data = data[:previousEnd]
+			result.Lowercased = lowercased.Bytes()
 			return result
 
 		case html.TextToken:
 			if ignore_depth == 0 && head_depth == 0 {
-				endIndex := reader.Position - len(z.Buffered())
+				lowercased.WriteByte(0)
+				lowercased.Write(bytes.ToLower(z.Text()))
+
+				/*endIndex := reader.Position - len(z.Buffered())
 				str := z.Raw()
 				startIndex := endIndex - len(str)
 
@@ -78,7 +83,7 @@ func ReadHtml(data []byte, parseUrls bool) *ParseResult {
 				for i := previousEnd; i < startIndex; i++ {
 					data[i] = 0
 				}
-				previousEnd = endIndex
+				previousEnd = endIndex*/
 			}
 
 			if title_depth == 1 {
