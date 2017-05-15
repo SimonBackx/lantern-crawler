@@ -20,6 +20,8 @@ const maxRecrawlDepth = 3
 const maxCrawlDepth = 20
 const maxFileSize = 2000000
 
+var onionRegexp = regexp.MustCompile("[^a-zA-Z2-7]+")
+
 type Subdomain struct {
 	Url           *url.URL
 	Index         int
@@ -547,8 +549,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 				if len(domain) != 22 {
 					// todo: ondersteuning voor tor subdomains toevoegen!
 					// Ongeldig -> verwijder alle ongeldige characters (tor browser doet dit ook)
-					reg := regexp.MustCompile("[^a-zA-Z2-7]+")
-					domain = reg.ReplaceAllString(domain, "")
+					domain = onionRegexp.ReplaceAllString(domain, "")
 					if len(domain) != 22 {
 						break
 					}

@@ -113,6 +113,17 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 		file.Close()
 
 		if worker != nil {
+			splitted := strings.Split(worker.Host, ".")
+
+			if cfg.OnlyOnion {
+				if len(splitted) != 1 {
+					continue
+				}
+			} else {
+				if len(splitted) != 2 {
+					continue
+				}
+			}
 			crawler.Workers[worker.Host] = worker
 
 			if worker.WantsToGetUp() {

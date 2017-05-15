@@ -48,6 +48,7 @@ func ConfigFromFile() *CrawlerConfig {
 		cfg.LogInfo("Using default configuration")
 		return cfg
 	}
+	defer file.Close()
 
 	decoder := json.NewDecoder(file)
 
