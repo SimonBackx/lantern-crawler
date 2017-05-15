@@ -59,12 +59,12 @@ func (q *Query) Execute(s *Source) *string {
 					break
 				}
 
-				if s.Text[i] == " "[0] {
+				if s.Text[i] == ' ' {
 					if !prev {
 						foundStart = i + 1
 						prev = true
 					}
-				} else if s.Text[i] == "\n"[0] {
+				} else if s.Text[i] == '\n' || s.Text[i] == '0' {
 					foundStart = i + 1
 					predot = false
 					break
@@ -84,13 +84,13 @@ func (q *Query) Execute(s *Source) *string {
 					break
 				}
 
-				if s.Text[i] == " "[0] {
+				if s.Text[i] == ' ' {
 					if !prev {
 						foundEnd = i
 						prev = true
 						enddot = true
 					}
-				} else if s.Text[i] == "\n"[0] {
+				} else if s.Text[i] == '\n' || s.Text[i] == '0' {
 					foundEnd = i
 					enddot = false
 					break

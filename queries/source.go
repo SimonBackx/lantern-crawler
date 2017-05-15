@@ -23,12 +23,12 @@ func (s *Source) GetOrCreateIndex() *suffixarray.Index {
 
 func (s *Source) Lookup(needle []byte) []int {
 	index := s.GetOrCreateIndex()
-	start := index.Lookup([]byte(needle), 0)
+	start := index.Lookup([]byte(needle), -1)
 
 	if start != nil {
 		// Staat het woord wel apart?
-		for index := range start {
-			endPosition := start[0] + len(needle)
+		for _, index := range start {
+			endPosition := index + len(needle)
 
 			endOk := false
 			startOk := false
@@ -36,13 +36,13 @@ func (s *Source) Lookup(needle []byte) []int {
 			// Voorwaarde: woord staat apart
 			if endPosition >= len(s.Text) {
 				endOk = true
-			} else if unicode.IsSpace(rune(s.Text[endPosition])) {
+			} else if s.Text[endPosition] == '0' || unicode.IsSpace(rune(s.Text[endPosition])) {
 				endOk = true
 			}
 
 			if index <= 0 {
 				startOk = true
-			} else if unicode.IsSpace(rune(s.Text[index-1])) {
+			} else if s.Text[index-1] == '0' || unicode.IsSpace(rune(s.Text[index-1])) {
 				startOk = true
 			}
 
