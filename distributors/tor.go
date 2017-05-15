@@ -18,7 +18,7 @@ type Tor struct {
 
 func NewTor() *Tor {
 	startSocksPort := 9150
-	availableDaemons := 30
+	availableDaemons := 20
 
 	Clients := NewClientList()
 	for i := 0; i < availableDaemons; i++ {
@@ -38,7 +38,7 @@ func NewTor() *Tor {
 
 			// Disable routing
 			"--ClientOnly", "1",
-			"--MaxCircuitDirtiness", "120", // Maximum seconden om tor circuit te hergebruiken
+			"--MaxCircuitDirtiness", "300", // Maximum seconden om tor circuit te hergebruiken
 			"--OnionTrafficOnly", "1",
 			"--SafeSocks", "1", // Voorkom dns leaks (aanvragen met al geresolvede dns worden genegeerd)
 		)
@@ -57,7 +57,7 @@ func NewTor() *Tor {
 
 		transport := &http.Transport{
 			Dial:         torDialer.Dial,
-			MaxIdleConns: 1000,
+			MaxIdleConns: 300,
 			//DisableKeepAlives: true, // Hmmm?
 			/*TLSHandshakeTimeout:   10 * time.Second,
 			  MaxIdleConnsPerHost:   0,

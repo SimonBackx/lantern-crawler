@@ -58,6 +58,7 @@ func main() {
 		Name:        "Lantern-crawler",
 		DisplayName: "Lantern-crawler",
 		Description: "Cyber threat collection in the darkweb",
+		UserName:    "lantern",
 	}
 
 	prg := &program{}
