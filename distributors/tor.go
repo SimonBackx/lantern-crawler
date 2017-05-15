@@ -57,7 +57,7 @@ func NewTor() *Tor {
 
 		transport := &http.Transport{
 			Dial:         torDialer.Dial,
-			MaxIdleConns: 300,
+			MaxIdleConns: 500,
 			//DisableKeepAlives: true, // Hmmm?
 			/*TLSHandshakeTimeout:   10 * time.Second,
 			  MaxIdleConnsPerHost:   0,
@@ -71,7 +71,7 @@ func NewTor() *Tor {
 		})
 	}
 
-	return &Tor{Clients: Clients, Count: 300}
+	return &Tor{Clients: Clients, Count: 560}
 }
 
 func (dist *Tor) GetClient() *http.Client {

@@ -26,7 +26,7 @@ func NewApiController() *ApiController {
 		Transport: tr,
 	}
 
-	return &ApiController{url: "http://localhost:8080/api", client: client}
+	return &ApiController{url: "https://lantrn.xyz/api", client: client}
 }
 
 func (a *ApiController) SaveStats(stats *queries.Stats) error {

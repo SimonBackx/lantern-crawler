@@ -20,3 +20,5 @@ old
 build
 .build
 progress
+fabfile.pyc
+lantern_rsa

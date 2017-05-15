@@ -35,7 +35,7 @@ func NewClearnet() *Clearnet {
 		Timeout:   30 * time.Second,
 		Transport: tr,
 	}
-	return &Clearnet{Client: client, Count: 300}
+	return &Clearnet{Client: client, Count: 560}
 }
 
 func (dist *Clearnet) GetClient() *http.Client {
