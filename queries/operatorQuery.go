@@ -39,8 +39,8 @@ func (o *OperatorQuery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-func (o *OperatorQuery) Execute(b []byte) [][]int {
-	first := o.First.Execute(b)
+func (o *OperatorQuery) Execute(s *Source) [][]int {
+	first := o.First.Execute(s)
 	if first != nil {
 		if o.Operator == OrOperator {
 			return first
@@ -51,7 +51,7 @@ func (o *OperatorQuery) Execute(b []byte) [][]int {
 		}
 	}
 
-	last := o.Last.Execute(b)
+	last := o.Last.Execute(s)
 	if last == nil {
 		return nil
 	}

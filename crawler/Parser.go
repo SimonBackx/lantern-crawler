@@ -32,8 +32,10 @@ func Parse(reader io.Reader, queryList []queries.Query, parseUrls bool) (*ParseR
 	// vervangen
 
 	// Queries op uitvoeren
+
+	source := queries.NewSource(data)
 	for _, query := range queryList {
-		snippet := query.Execute(data)
+		snippet := query.Execute(source)
 		if snippet != nil {
 			apiResult := queries.NewResult(query, nil, nil, &document, result.Title, snippet)
 			result.Results = append(result.Results, apiResult)

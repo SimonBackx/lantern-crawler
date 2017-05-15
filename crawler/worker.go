@@ -295,6 +295,11 @@ func (w *Hostworker) Run(client *http.Client) {
 
 		// Onze crawler terug wakker maken om eventueel een nieuwe request op te starten
 		w.crawler.WorkerEnded.stack(w)
+
+		if w.crawler.cfg.LogGoroutinesEnabled {
+			w.crawler.cfg.LogInfo("Goroutine for host " + w.String() + " stopped")
+		}
+
 	}()
 
 	if w.crawler.cfg.LogGoroutinesEnabled {
@@ -443,8 +448,6 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				// we stoppen even met deze crawler
 				w.sleepAfter = -1
 
-				// Even negeren
-				w.FailStreak--
 			} else if strings.Contains(str, "Client.Timeout") {
 				w.crawler.speedLogger.LogTimeout()
 			} else if strings.Contains(str, "timeout awaiting response headers") {
@@ -616,6 +619,7 @@ func (w *Hostworker) RequestStarted(item *CrawlItem) {
 
 func (w *Hostworker) RequestFinished(item *CrawlItem) {
 	//w.crawler.cfg.LogInfo(fmt.Sprintf("Request finished. %v", item.URL.String()))
+
 	w.FailStreak = 0
 	w.SucceededDownloads++
 
@@ -653,6 +657,8 @@ func (w *Hostworker) RequestIgnored(item *CrawlItem) {
 }
 
 func (w *Hostworker) RequestFailed(item *CrawlItem) {
+	w.crawler.cfg.LogInfo(fmt.Sprintf("Request failed. %v", item.URL.String()))
+
 	item.FailCount++
 
 	if item.FailCount == 2 {

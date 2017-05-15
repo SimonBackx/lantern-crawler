@@ -3,24 +3,19 @@ package queries
 import (
 	"encoding/json"
 	"fmt"
-	"golang.org/x/text/language"
-	"golang.org/x/text/search"
 )
 
 type TextQuery struct {
-	Text    string
-	pattern *search.Pattern
+	Text string
 }
 
-func (q *TextQuery) Execute(b []byte) [][]int {
-	if q.pattern == nil {
-		matcher := search.New(language.English, search.Loose)
-		q.pattern = matcher.CompileString(q.Text)
-	}
+func (q *TextQuery) Execute(s *Source) [][]int {
+	index := s.GetOrCreateIndex()
 
-	start, end := q.pattern.Index(b)
-	if start != -1 {
-		return [][]int{[]int{start, end}}
+	start := index.Lookup([]byte(q.Text), 1)
+
+	if start != nil {
+		return [][]int{[]int{start[0], start[0] + len(q.Text)}}
 	}
 
 	return nil

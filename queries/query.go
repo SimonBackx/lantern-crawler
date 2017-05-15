@@ -25,8 +25,8 @@ func NewQuery(name string, q QueryAction) *Query {
 	return &Query{Name: name, CreatedOn: now, Query: q}
 }
 
-func (q *Query) Execute(b []byte) *string {
-	result := q.Query.Execute(b)
+func (q *Query) Execute(s *Source) *string {
+	result := q.Query.Execute(s)
 
 	if result == nil || len(result) == 0 {
 		return nil
@@ -59,12 +59,12 @@ func (q *Query) Execute(b []byte) *string {
 					break
 				}
 
-				if b[i] == " "[0] {
+				if s.Text[i] == " "[0] {
 					if !prev {
 						foundStart = i + 1
 						prev = true
 					}
-				} else if b[i] == "\n"[0] {
+				} else if s.Text[i] == "\n"[0] {
 					foundStart = i + 1
 					predot = false
 					break
@@ -78,19 +78,19 @@ func (q *Query) Execute(b []byte) *string {
 			foundEnd := end
 			prev = false
 			for i := end; i <= end+margin; i++ {
-				if i >= len(b) {
-					foundEnd = len(b)
+				if i >= len(s.Text) {
+					foundEnd = len(s.Text)
 					enddot = false
 					break
 				}
 
-				if b[i] == " "[0] {
+				if s.Text[i] == " "[0] {
 					if !prev {
 						foundEnd = i
 						prev = true
 						enddot = true
 					}
-				} else if b[i] == "\n"[0] {
+				} else if s.Text[i] == "\n"[0] {
 					foundEnd = i
 					enddot = false
 					break
@@ -107,12 +107,12 @@ func (q *Query) Execute(b []byte) *string {
 
 		} else {
 			end = start + characters
-			if end > len(b) {
-				end = len(b)
+			if end > len(s.Text) {
+				end = len(s.Text)
 			}
 		}
 
-		buffer.Write(b[start:end])
+		buffer.Write(s.Text[start:end])
 
 	}
 

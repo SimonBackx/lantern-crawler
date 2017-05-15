@@ -42,12 +42,9 @@ func NewRegexpQuery(str string) *RegexpQuery {
 	return &RegexpQuery{Regexp: reg}
 }
 
-func (a *RegexpQuery) Execute(b []byte) [][]int {
-	result := a.Regexp.FindIndex(b)
-	if result == nil {
-		return nil
-	}
-	return [][]int{result}
+func (a *RegexpQuery) Execute(s *Source) [][]int {
+	index := s.GetOrCreateIndex()
+	return index.FindAllIndex(a.Regexp, 1)
 }
 
 func (q *RegexpQuery) String() string {
