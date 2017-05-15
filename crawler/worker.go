@@ -148,8 +148,10 @@ func (w *Hostworker) HardReset() {
 func (w *Hostworker) MoveToMemory() {
 	file, err := os.Open("/etc/lantern/hosts/host_" + w.Host + ".txt")
 	if err != nil {
+		w.crawler.cfg.LogError(err)
 		panic("Coudn't move to memory: file not found")
 	}
+	defer file.Close()
 
 	w.InMemory = true
 	w.IntroductionPoints = NewCrawlQueue("Introduction points")
