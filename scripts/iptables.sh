@@ -32,7 +32,7 @@ iptables -A OUTPUT -o lo -j ACCEPT
 #######################################################################################################
 ## Global iptable rules. Not IP specific
 
-echo "Allowing new and established incoming connections to port 80, 443"
+echo "Allowing new and established outgoing connections to port 80, 443"
 iptables -A OUTPUT  -p tcp --dport 80 -m state --state NEW,ESTABLISHED -j ACCEPT
 iptables -A INPUT -p tcp --sport 80 -m state --state ESTABLISHED     -j ACCEPT
 
@@ -55,6 +55,19 @@ echo "Set default policy to 'DROP' for ipv6"
 ip6tables -P INPUT   DROP
 ip6tables -P FORWARD DROP
 ip6tables -P OUTPUT  DROP
+
+echo "Allowing new and established outgoing connections to port 80, 443"
+ip6tables -A OUTPUT  -p tcp --dport 80 -m state --state NEW,ESTABLISHED -j ACCEPT
+ip6tables -A INPUT -p tcp --sport 80 -m state --state ESTABLISHED     -j ACCEPT
+
+ip6tables -A OUTPUT  -p tcp --dport 443 -m state --state NEW,ESTABLISHED -j ACCEPT
+ip6tables -A INPUT -p tcp --sport 443 -m state --state ESTABLISHED     -j ACCEPT
+
+echo "Allowing DNS lookups (tcp, udp port 53)"
+ip6tables -A OUTPUT -p udp --dport 53 -m state --state NEW,ESTABLISHED -j ACCEPT
+ip6tables -A INPUT  -p udp --sport 53 -m state --state ESTABLISHED     -j ACCEPT
+ip6tables -A OUTPUT -p tcp --dport 53 -m state --state NEW,ESTABLISHED -j ACCEPT
+ip6tables -A INPUT  -p tcp --sport 53 -m state --state ESTABLISHED     -j ACCEPT
 
 echo "Saving rules for next reboot"
 sudo su -c 'iptables-save > /etc/iptables/rules.v4'

@@ -295,15 +295,11 @@ func (crawler *Crawler) Quit() {
 	crawler.cfg.LogInfo("Stopping goroutines...")
 	crawler.waitGroup.Wait()
 
-	if crawler.cfg.SaveToFiles {
-		crawler.cfg.LogInfo("Saving progress...")
-		for _, worker := range crawler.Workers {
-			if worker.NeedsWriteToDisk() {
-				worker.MoveToDisk()
-			}
+	crawler.cfg.LogInfo("Saving progress...")
+	for _, worker := range crawler.Workers {
+		if worker.NeedsWriteToDisk() {
+			worker.MoveToDisk()
 		}
-	} else {
-		crawler.cfg.LogInfo("Progress saving disabled (cfg.SaveToFiles = false).")
 	}
 
 	crawler.cfg.LogInfo("The crawler has stopped")

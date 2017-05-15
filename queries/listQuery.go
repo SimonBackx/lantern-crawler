@@ -3,14 +3,31 @@ package queries
 import (
 	"encoding/json"
 	"fmt"
+	"golang.org/x/text/language"
+	"golang.org/x/text/search"
 )
 
 type ListQuery struct {
-	List []string
+	List     []string
+	patterns []*search.Pattern
 }
 
 func (q *ListQuery) Execute(b []byte) [][]int {
-	// todo: not implemented
+	if q.patterns == nil {
+		matcher := search.New(language.English, search.WholeWord, search.IgnoreCase, search.IgnoreDiacritics, search.IgnoreWidth)
+		q.patterns = make([]*search.Pattern, len(q.List))
+		for i, str := range q.List {
+			q.patterns[i] = matcher.CompileString(str)
+		}
+	}
+
+	for _, pattern := range q.patterns {
+		start, end := pattern.Index(b)
+		if start != -1 {
+			return [][]int{[]int{start, end}}
+		}
+	}
+
 	return nil
 }
 
