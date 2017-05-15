@@ -61,9 +61,9 @@ func (logger *SpeedLogger) Run() {
 		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("Alloc = %v KB, Sys = %v KB", memoryAlloc, memorySys))
 
 		// Als er veel timeouts zijn -> vertragen
-		if logger.Timeouts > 60 && logger.Crawler.distributor.AvailableClients() >= 0 {
+		if logger.Timeouts > logger.Crawler.cfg.MaxTimeouts && logger.Crawler.distributor.AvailableClients() >= 0 {
 			logger.Crawler.distributor.DecreaseClients()
-		} else if logger.Timeouts < 20 && logger.Crawler.distributor.AvailableClients() == 0 {
+		} else if logger.Timeouts < logger.Crawler.cfg.MinTimeouts && logger.Crawler.distributor.AvailableClients() == 0 {
 			logger.Crawler.distributor.IncreaseClients()
 		}
 

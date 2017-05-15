@@ -16,12 +16,13 @@ type Distributor interface {
 }
 
 type Clearnet struct {
-	Count  int
-	Used   int
-	Client *http.Client
+	Count    int
+	Used     int
+	MaxCount int
+	Client   *http.Client
 }
 
-func NewClearnet() *Clearnet {
+func NewClearnet(count, max int) *Clearnet {
 	tr := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 		DisableKeepAlives: true, // Hmmm?
@@ -35,7 +36,7 @@ func NewClearnet() *Clearnet {
 		Timeout:   30 * time.Second,
 		Transport: tr,
 	}
-	return &Clearnet{Client: client, Count: 560}
+	return &Clearnet{Client: client, Count: count, MaxCount: max}
 }
 
 func (dist *Clearnet) GetClient() *http.Client {
@@ -60,6 +61,9 @@ func (dist *Clearnet) DecreaseClients() {
 
 func (dist *Clearnet) IncreaseClients() {
 	dist.Count = int(float64(dist.Count) * 1.05)
+	if dist.Count > dist.MaxCount {
+		dist.Count = dist.MaxCount
+	}
 }
 
 func (dist *Clearnet) AvailableClients() int {

@@ -56,9 +56,9 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 
 	var distributor distributors.Distributor
 	if cfg.UseTorProxy {
-		distributor = distributors.NewTor()
+		distributor = distributors.NewTor(cfg.TorDaemons, cfg.InitialWorkers, cfg.MaxWorkers)
 	} else {
-		distributor = distributors.NewClearnet()
+		distributor = distributors.NewClearnet(cfg.InitialWorkers, cfg.MaxWorkers)
 	}
 
 	var wg sync.WaitGroup
@@ -81,7 +81,6 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 		ApiController:      NewApiController(),
 	}
 	crawler.speedLogger.Crawler = crawler
-
 	if !cfg.Testing {
 		crawler.RefreshQueries()
 	}

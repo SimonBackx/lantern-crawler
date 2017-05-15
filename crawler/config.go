@@ -8,11 +8,16 @@ import (
 )
 
 type CrawlerConfig struct {
-	UseTorProxy   bool
-	OnlyOnion     bool
-	LoadFromFiles bool
-	MaxDomains    int /// 0 = infinite
-	Testing       bool
+	UseTorProxy    bool
+	OnlyOnion      bool
+	LoadFromFiles  bool
+	MaxDomains     int /// 0 = infinite
+	Testing        bool
+	MaxTimeouts    int
+	MinTimeouts    int
+	MaxWorkers     int
+	InitialWorkers int
+	TorDaemons     int
 
 	LogRecrawlingEnabled bool
 	LogGoroutinesEnabled bool
@@ -34,16 +39,30 @@ func (cfg *CrawlerConfig) Log(label, str string) {
 func ConfigFromFile() *CrawlerConfig {
 	// Default configuration
 	cfg := &CrawlerConfig{
-		UseTorProxy:   false,
-		OnlyOnion:     false,
-		LoadFromFiles: true,
-		MaxDomains:    0,
+		UseTorProxy:    false,
+		OnlyOnion:      false,
+		LoadFromFiles:  true,
+		MaxDomains:     0,
+		MinTimeouts:    15,
+		MaxTimeouts:    50,
+		MaxWorkers:     1000,
+		InitialWorkers: 560,
+		TorDaemons:     20,
 
 		LogRecrawlingEnabled: false,
 		LogGoroutinesEnabled: false,
 	}
 
-	file, err := os.Open("/etc/lantern/crawler.conf")
+	defer func() {
+		file, err := os.Create("/etc/lantern/crawler.json")
+		if err == nil {
+			encoder := json.NewEncoder(file)
+			encoder.SetIndent("", "    ")
+			encoder.Encode(cfg)
+		}
+	}()
+
+	file, err := os.Open("/etc/lantern/crawler.json")
 	if err != nil {
 		cfg.LogInfo("Using default configuration")
 		return cfg

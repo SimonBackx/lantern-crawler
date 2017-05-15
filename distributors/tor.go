@@ -11,14 +11,15 @@ import (
 )
 
 type Tor struct {
-	Clients *ClientList
-	Count   int
-	Used    int
+	Clients  *ClientList
+	Count    int
+	MaxCount int
+	Used     int
 }
 
-func NewTor() *Tor {
+func NewTor(daemons, count, max int) *Tor {
 	startSocksPort := 9150
-	availableDaemons := 20
+	availableDaemons := daemons
 
 	Clients := NewClientList()
 	for i := 0; i < availableDaemons; i++ {
@@ -71,7 +72,7 @@ func NewTor() *Tor {
 		})
 	}
 
-	return &Tor{Clients: Clients, Count: 560}
+	return &Tor{Clients: Clients, Count: count, MaxCount: max}
 }
 
 func (dist *Tor) GetClient() *http.Client {
@@ -99,6 +100,9 @@ func (dist *Tor) DecreaseClients() {
 
 func (dist *Tor) IncreaseClients() {
 	dist.Count = int(float64(dist.Count) * 1.05)
+	if dist.Count > dist.MaxCount {
+		dist.Count = dist.MaxCount
+	}
 }
 
 func (dist *Tor) AvailableClients() int {
