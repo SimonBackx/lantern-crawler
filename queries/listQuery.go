@@ -10,14 +10,13 @@ type ListQuery struct {
 }
 
 func (q *ListQuery) Execute(s *Source) [][]int {
-	index := s.GetOrCreateIndex()
-
 	for _, str := range q.List {
-		start := index.Lookup([]byte(str), 1)
-
-		if start != nil {
-			return [][]int{[]int{start[0], start[0] + len(str)}}
+		position := s.Lookup([]byte(str))
+		if position == nil {
+			continue
 		}
+
+		return [][]int{position}
 	}
 
 	return nil

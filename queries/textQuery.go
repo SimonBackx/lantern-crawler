@@ -10,15 +10,12 @@ type TextQuery struct {
 }
 
 func (q *TextQuery) Execute(s *Source) [][]int {
-	index := s.GetOrCreateIndex()
-
-	start := index.Lookup([]byte(q.Text), 1)
-
-	if start != nil {
-		return [][]int{[]int{start[0], start[0] + len(q.Text)}}
+	position := s.Lookup([]byte(q.Text))
+	if position == nil {
+		return nil
 	}
 
-	return nil
+	return [][]int{position}
 }
 
 func (q *TextQuery) String() string {
