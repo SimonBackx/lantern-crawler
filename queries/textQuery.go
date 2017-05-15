@@ -14,7 +14,7 @@ type TextQuery struct {
 
 func (q *TextQuery) Execute(b []byte) [][]int {
 	if q.pattern == nil {
-		matcher := search.New(language.English, search.WholeWord, search.IgnoreCase, search.IgnoreDiacritics, search.IgnoreWidth)
+		matcher := search.New(language.English, search.Loose)
 		q.pattern = matcher.CompileString(q.Text)
 	}
 

@@ -303,7 +303,7 @@ func (w *Hostworker) Run(client *http.Client) {
 
 	w.Client = client
 
-	w.sleepAfter = 10 + rand.Intn(50)
+	w.sleepAfter = w.crawler.cfg.SleepAfter + rand.Intn(w.crawler.cfg.SleepAfterRandom)
 
 	if !w.InMemory {
 		w.MoveToMemory()
@@ -336,7 +336,7 @@ func (w *Hostworker) Run(client *http.Client) {
 				return
 			}
 
-			time.Sleep(time.Millisecond * time.Duration(4000+rand.Intn(4000)))
+			time.Sleep(time.Millisecond * time.Duration(w.crawler.cfg.SleepTime+rand.Intn(w.crawler.cfg.SleepTimeRandom)))
 
 		}
 	}

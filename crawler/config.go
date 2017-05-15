@@ -8,16 +8,21 @@ import (
 )
 
 type CrawlerConfig struct {
-	UseTorProxy    bool
-	OnlyOnion      bool
-	LoadFromFiles  bool
-	MaxDomains     int /// 0 = infinite
-	Testing        bool
-	MaxTimeouts    int
-	MinTimeouts    int
-	MaxWorkers     int
-	InitialWorkers int
-	TorDaemons     int
+	UseTorProxy      bool
+	OnlyOnion        bool
+	LoadFromFiles    bool
+	MaxDomains       int /// 0 = infinite
+	Testing          bool
+	MaxTimeouts      int
+	MinTimeouts      int
+	MaxWorkers       int
+	InitialWorkers   int
+	TorDaemons       int
+	SleepAfter       int
+	SleepAfterRandom int
+
+	SleepTime       int
+	SleepTimeRandom int
 
 	LogRecrawlingEnabled bool
 	LogGoroutinesEnabled bool
@@ -48,6 +53,11 @@ func ConfigFromFile() *CrawlerConfig {
 		MaxWorkers:     1000,
 		InitialWorkers: 560,
 		TorDaemons:     20,
+
+		SleepAfter:       10,
+		SleepAfterRandom: 50,
+		SleepTime:        4000,
+		SleepTimeRandom:  4000,
 
 		LogRecrawlingEnabled: false,
 		LogGoroutinesEnabled: false,

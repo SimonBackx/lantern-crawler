@@ -14,7 +14,7 @@ type ListQuery struct {
 
 func (q *ListQuery) Execute(b []byte) [][]int {
 	if q.patterns == nil {
-		matcher := search.New(language.English, search.WholeWord, search.IgnoreCase, search.IgnoreDiacritics, search.IgnoreWidth)
+		matcher := search.New(language.English, search.Loose)
 		q.patterns = make([]*search.Pattern, len(q.List))
 		for i, str := range q.List {
 			q.patterns[i] = matcher.CompileString(str)
