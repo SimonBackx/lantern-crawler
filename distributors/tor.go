@@ -40,7 +40,7 @@ func NewTor(daemons, count, max int) *Tor {
 			// Disable routing
 			"--ClientOnly", "1",
 			"--MaxCircuitDirtiness", "300", // Maximum seconden om tor circuit te hergebruiken
-			"--OnionTrafficOnly", "1",
+			//"--OnionTrafficOnly", "1", (unsupported)
 			"--SafeSocks", "1", // Voorkom dns leaks (aanvragen met al geresolvede dns worden genegeerd)
 		)
 
