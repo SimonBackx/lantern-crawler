@@ -2,7 +2,6 @@ package crawler
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/SimonBackx/lantern-crawler/queries"
 	"golang.org/x/net/html"
 	"io"
