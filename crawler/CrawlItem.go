@@ -193,7 +193,7 @@ func (i *CrawlItem) IsUnavailable() bool {
 }
 
 func (i *CrawlItem) FakeRetry() {
-	n := time.Now()
+	n := time.Now().Add(-time.Minute * 10)
 	i.LastDownloadStarted = &n
 	i.FailCount = 1
 }

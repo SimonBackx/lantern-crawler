@@ -760,11 +760,7 @@ func (w *Hostworker) GetNextRequest() *CrawlItem {
 	}
 
 	// Nu pas langdurige fails aan bod laten
-	if f != nil {
-		return f
-	}
-
-	return nil
+	return w.FailedQueue.Pop()
 }
 
 func cleanURLPath(u *url.URL) string {
