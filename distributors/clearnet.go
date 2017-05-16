@@ -22,18 +22,18 @@ type Clearnet struct {
 	Client   *http.Client
 }
 
-func NewClearnet(count, max int) *Clearnet {
+func NewClearnet(count, max, headerTimeout, requestTimeout int) *Clearnet {
 	tr := &http.Transport{
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 		DisableKeepAlives: true, // Hmmm?
 		//IdleConnTimeout: 15 * time.Second,
 
 		// Tijd dat we wachten op header (zo kort mogelijk houden)
-		ResponseHeaderTimeout: 15 * time.Second,
+		ResponseHeaderTimeout: time.Duration(headerTimeout) * time.Second,
 	}
 
 	client := &http.Client{
-		Timeout:   30 * time.Second,
+		Timeout:   time.Duration(requestTimeout) * time.Second,
 		Transport: tr,
 	}
 	return &Clearnet{Client: client, Count: count, MaxCount: max}

@@ -17,7 +17,7 @@ func run(quit chan bool, finished chan bool) {
 	myCrawler := crawler.NewCrawler(conf)
 
 	var urls []string
-	if conf.UseTorProxy {
+	if conf.OnlyOnion {
 		urls = []string{"http://torlinkbgs6aabns.onion/", "http://zqktlwi4fecvo6ri.onion/wiki/index.php/Main_Page", "http://w363zoq3ylux5rf5.onion/"}
 	} else {
 		urls = []string{"http://www.startpagina.nl"}

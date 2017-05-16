@@ -27,6 +27,9 @@ type CrawlerConfig struct {
 	LogRecrawlingEnabled bool
 	LogGoroutinesEnabled bool
 	LogRequests          bool
+	LogNetwork           bool
+	HeaderTimeout        int
+	RequestTimeout       int
 }
 
 func (cfg *CrawlerConfig) LogError(err error) {
@@ -63,6 +66,10 @@ func ConfigFromFile() *CrawlerConfig {
 		LogRecrawlingEnabled: false,
 		LogGoroutinesEnabled: false,
 		LogRequests:          false,
+		LogNetwork:           false,
+
+		HeaderTimeout:  30,
+		RequestTimeout: 45,
 	}
 
 	defer func() {

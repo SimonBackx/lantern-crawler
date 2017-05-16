@@ -17,9 +17,10 @@ type Tor struct {
 	Used     int
 }
 
-func NewTor(daemons, count, max int) *Tor {
+func NewTor(daemons, count, max, headerTimeout, requestTimeout int) *Tor {
 	startSocksPort := 9150
 	availableDaemons := daemons
+	run("kill", "$(pgrep tor)")
 
 	Clients := NewClientList()
 	for i := 0; i < availableDaemons; i++ {
@@ -38,8 +39,8 @@ func NewTor(daemons, count, max int) *Tor {
 			"--HashedControlPassword", "16:118E516CCAA79CF76014434BD85092BE8E34C6D0D7594C2F5D4093F78B",
 
 			// Disable routing
-			"--ClientOnly", "1",
-			"--MaxCircuitDirtiness", "300", // Maximum seconden om tor circuit te hergebruiken
+			//"--ClientOnly", "1",
+			//"--MaxCircuitDirtiness", "300", // Maximum seconden om tor circuit te hergebruiken
 			//"--OnionTrafficOnly", "1", (unsupported)
 			"--SafeSocks", "1", // Voorkom dns leaks (aanvragen met al geresolvede dns worden genegeerd)
 		)
@@ -63,12 +64,12 @@ func NewTor(daemons, count, max int) *Tor {
 			/*TLSHandshakeTimeout:   10 * time.Second,
 			  MaxIdleConnsPerHost:   0,
 			  ResponseHeaderTimeout: 10 * time.Second,*/
-			ResponseHeaderTimeout: 15 * time.Second,
+			ResponseHeaderTimeout: time.Duration(headerTimeout) * time.Second,
 			TLSClientConfig:       &tls.Config{InsecureSkipVerify: true}, // Onveilige https toelaten
 		}
 		Clients.Push(&http.Client{
 			Transport: transport,
-			Timeout:   30 * time.Second,
+			Timeout:   time.Duration(requestTimeout) * time.Second,
 		})
 	}
 

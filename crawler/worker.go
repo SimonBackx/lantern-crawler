@@ -18,7 +18,7 @@ import (
 
 const maxRecrawlDepth = 3
 const maxCrawlDepth = 20
-const maxFileSize = 2000000
+const maxFileSize = 1000000
 
 var onionRegexp = regexp.MustCompile("[^a-zA-Z2-7]+")
 
@@ -82,8 +82,10 @@ type Hostworker struct {
 
 	LatestCycle int
 
-	InMemory           bool
-	cachedWantsToGetUp bool
+	InMemory              bool
+	cachedWantsToGetUp    bool
+	cachedLastDownload    *time.Time
+	cachedRecrawlOnMemory bool
 }
 
 func (w *Hostworker) String() string {
@@ -121,6 +123,12 @@ func NewHostWorkerFromFile(file *os.File, crawler *Crawler) *Hostworker {
 
 func (w *Hostworker) MoveToDisk() {
 	w.cachedWantsToGetUp = w.WantsToGetUp()
+	if w.IntroductionPoints.IsEmpty() {
+		w.cachedLastDownload = nil
+	} else {
+		w.cachedLastDownload = w.IntroductionPoints.First.LastDownload
+	}
+
 	if !w.SaveToFile() {
 		return
 	}
@@ -163,16 +171,27 @@ func (w *Hostworker) MoveToMemory() {
 	if !w.ReadFromReader(bufio.NewReader(file)) {
 		panic("Coudn't move to memory: file not readable")
 	}
+
+	if w.cachedRecrawlOnMemory {
+		w.cachedRecrawlOnMemory = false
+		w.Recrawl()
+	}
 }
 
 func (w *Hostworker) GetRecrawlDuration() time.Duration {
+	if !w.InMemory {
+		if w.cachedLastDownload == nil {
+			panic("GetRecrawlDuration on worker with empty IntroductionPoints (disk)!")
+			return time.Minute * 5
+		}
+		return time.Hour*12 - time.Since(*w.cachedLastDownload)
+	}
+
 	if w.IntroductionPoints.IsEmpty() {
 		w.crawler.Panic("GetRecrawlDuration on worker with empty IntroductionPoints!")
 		return time.Minute * 5
 	}
-	duration := time.Minute*30 - time.Since(*w.IntroductionPoints.First.LastDownload)
-
-	return duration
+	return time.Hour*12 - time.Since(*w.IntroductionPoints.First.LastDownload)
 }
 
 func NewHostworker(host string, crawler *Crawler) *Hostworker {
@@ -259,6 +278,12 @@ func (w *Hostworker) AddQueue(q []*url.URL) {
 /// Start een hercrawl cyclus. Voer dit enkel uit als de worker niet
 /// 'aan' staat.
 func (w *Hostworker) Recrawl() {
+	if !w.InMemory {
+		w.cachedWantsToGetUp = true
+		w.cachedRecrawlOnMemory = true
+		return
+	}
+
 	w.LatestCycle++
 
 	if w.crawler.cfg.LogRecrawlingEnabled {
@@ -347,11 +372,10 @@ func (w *Hostworker) Run(client *http.Client) {
 
 func (w *Hostworker) Request(item *CrawlItem) {
 
-
 	// todo: . / .. splitten verwijderen in ResolveReference
 	// en misschien meteen string van maken?
 	reqUrl := item.Subdomain.Url.ResolveReference(item.URL)
-	
+
 	if w.crawler.cfg.LogRequests {
 		w.crawler.cfg.LogInfo("New request " + reqUrl.String())
 	}
@@ -369,6 +393,9 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			defer response.Body.Close()
 
 			if response.StatusCode < 200 || response.StatusCode >= 300 {
+				if w.crawler.cfg.LogNetwork {
+					w.crawler.cfg.Log("network", fmt.Sprintf("status %v %s", response.StatusCode, reqUrl))
+				}
 
 				// Special exceptions
 				if response.StatusCode == 429 {
@@ -381,6 +408,8 @@ func (w *Hostworker) Request(item *CrawlItem) {
 
 				// ignore range: 400 - 406
 				if response.StatusCode >= 400 && response.StatusCode <= 406 {
+					if w.crawler.cfg.LogNetwork {
+					}
 					w.RequestIgnored(item)
 					return
 				}
@@ -406,6 +435,10 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				//w.crawler.cfg.LogInfo("Response: Content too long")
 				// Too big
 				// Eventueel op een ignore list zetten
+				if w.crawler.cfg.LogNetwork {
+					w.crawler.cfg.Log("network", "file too big (content length) "+reqUrl.String())
+				}
+
 				w.RequestIgnored(item)
 				return
 			}
@@ -426,6 +459,10 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			if contentType != "text/html; charset=utf-8" {
 				//w.crawler.cfg.LogInfo("Not a HTML file")
 				// Op ignore list zetten
+				if w.crawler.cfg.LogNetwork {
+					w.crawler.cfg.Log("network", "not a html file "+reqUrl.String())
+				}
+
 				w.RequestIgnored(item)
 				return
 			}
@@ -446,6 +483,10 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			}
 
 			str := err.Error()
+			if w.crawler.cfg.LogNetwork {
+				w.crawler.cfg.Log("network", str)
+			}
+
 			if strings.Contains(str, "SOCKS5") {
 				// Er is iets mis met de proxy,
 				// zal zich normaal uatomatisch herstellen, maar
@@ -489,6 +530,9 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 
 	if err != nil {
 		if err.Error() == "Reader reached maximum bytes!" {
+			if w.crawler.cfg.LogNetwork {
+				w.crawler.cfg.Log("network", "file too big "+item.String())
+			}
 			w.RequestIgnored(item)
 			return false
 		}
@@ -553,11 +597,11 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 
 				domain := domains[len(domains)-2]
 
-				if len(domain) != 22 {
+				if len(domain) != 16 {
 					// todo: ondersteuning voor tor subdomains toevoegen!
 					// Ongeldig -> verwijder alle ongeldige characters (tor browser doet dit ook)
 					domain = onionRegexp.ReplaceAllString(domain, "")
-					if len(domain) != 22 {
+					if len(domain) != 16 {
 						continue
 					}
 					// Terug samenvoegen
@@ -625,7 +669,6 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 	if w.crawler.cfg.LogRequests {
 		w.crawler.cfg.LogInfo("Request finished" + item.URL.String())
 	}
-
 
 	w.FailStreak = 0
 	w.SucceededDownloads++

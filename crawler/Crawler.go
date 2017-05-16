@@ -56,9 +56,9 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 
 	var distributor distributors.Distributor
 	if cfg.UseTorProxy {
-		distributor = distributors.NewTor(cfg.TorDaemons, cfg.InitialWorkers, cfg.MaxWorkers)
+		distributor = distributors.NewTor(cfg.TorDaemons, cfg.InitialWorkers, cfg.MaxWorkers, cfg.HeaderTimeout, cfg.RequestTimeout)
 	} else {
-		distributor = distributors.NewClearnet(cfg.InitialWorkers, cfg.MaxWorkers)
+		distributor = distributors.NewClearnet(cfg.InitialWorkers, cfg.MaxWorkers, cfg.HeaderTimeout, cfg.RequestTimeout)
 	}
 
 	var wg sync.WaitGroup

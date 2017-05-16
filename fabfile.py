@@ -28,5 +28,11 @@ def upload():
 
     run("mkdir -p "+uploading_directory)
 
+    run("sudo systemctl stop lanterncrawler")
+
     with settings(hide('warnings', 'running', 'stdout')):
         rsync_project(remote_dir=uploading_directory, local_dir="build/crawler", delete=True)
+
+    run("sudo /etc/lantern/crawler -service uninstall")
+    run("sudo /etc/lantern/crawler -service install")
+    run("sudo /etc/lantern/crawler -service start")

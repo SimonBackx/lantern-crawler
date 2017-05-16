@@ -54,10 +54,14 @@ func main() {
 	svcFlag := flag.String("service", "", "Control the system service.")
 	flag.Parse()
 
+	options := make(service.KeyValue)
+	options["LimitNOFILE"] = 250000
+
 	svcConfig := &service.Config{
 		Name:        "lanterncrawler",
 		DisplayName: "Lantern-Crawler",
 		Description: "Cyber threat collection in the darkweb",
+		Option:      options,
 	}
 
 	prg := &program{}
