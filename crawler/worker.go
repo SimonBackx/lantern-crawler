@@ -284,6 +284,10 @@ func (w *Hostworker) Recrawl() {
 		return
 	}
 
+	// Goede start - als we recrawlen is ooit een request geslaagd
+	// als het nu niet meer slaagt zal recrawl niet meer gebeuren
+	// maar zal een lang fail interval gestart worden
+	w.FailStreak = 0
 	w.LatestCycle++
 
 	if w.crawler.cfg.LogRecrawlingEnabled {
@@ -735,9 +739,11 @@ func (w *Hostworker) RequestFailed(item *CrawlItem) {
 }
 
 func (w *Hostworker) GetNextRequest() *CrawlItem {
-	f := w.FailedQueue.Pop()
 
-	if f != nil {
+	f := w.FailedQueue.First()
+
+	if f != nil && f.FailCount < 3 {
+		f = w.FailedQueue.Pop()
 		return f
 	}
 
@@ -749,11 +755,16 @@ func (w *Hostworker) GetNextRequest() *CrawlItem {
 		return w.Queue.Pop()
 	}
 
-	if w.LowPriorityQueue.IsEmpty() {
-		return nil
+	if !w.LowPriorityQueue.IsEmpty() {
+		return w.LowPriorityQueue.Pop()
 	}
 
-	return w.LowPriorityQueue.Pop()
+	// Nu pas langdurige fails aan bod laten
+	if f != nil {
+		return f
+	}
+
+	return nil
 }
 
 func cleanURLPath(u *url.URL) string {

@@ -37,7 +37,7 @@ func (logger *SpeedLogger) Run() {
 		workers := logger.Crawler.distributor.UsedClients()
 
 		domains := len(logger.Crawler.Workers)
-		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v requests, %v workers, %v domains", int(requests/60), workers, domains))
+		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v requests, %v workers, %v domains, %v sleeping", requests, workers, domains, logger.Crawler.SleepingCrawlers.Length()))
 
 		downloadSpeed := int(float64(logger.DownloadSize) / 60 / 1024) // * 6
 		downloadSize := 0
@@ -46,14 +46,14 @@ func (logger *SpeedLogger) Run() {
 		if logger.Count > 0 {
 			downloadSize = int(float64(logger.DownloadSize) / 1024 / float64(logger.Count))
 			downloadTime = int(logger.DownloadTime.Seconds() * 1000 / float64(logger.Count))
-
-			logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v KB/s, %v KB/page, %v ms/page, %v timeouts",
-				downloadSpeed,
-				downloadSize,
-				downloadTime,
-				logger.Timeouts,
-			))
 		}
+
+		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v KB/s, %v KB/page, %v ms/page, %v timeouts",
+			downloadSpeed,
+			downloadSize,
+			downloadTime,
+			logger.Timeouts,
+		))
 
 		runtime.ReadMemStats(&m)
 		memoryAlloc := m.Alloc / 1024

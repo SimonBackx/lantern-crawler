@@ -2,11 +2,13 @@ package crawler
 
 import (
 	"context"
+	"fmt"
 	"github.com/SimonBackx/lantern-crawler/distributors"
 	"github.com/SimonBackx/lantern-crawler/queries"
 	"io/ioutil"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -96,6 +98,8 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 
 	// Read from files
 	files, _ := ioutil.ReadDir("/etc/lantern/hosts")
+
+	introductionList := make([]*Hostworker, 0)
 	for _, f := range files {
 		if strings.HasPrefix(f.Name(), ".") {
 			// Hidden files negeren
@@ -125,12 +129,32 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 			}
 			crawler.Workers[worker.Host] = worker
 
+			if !worker.IntroductionPoints.IsEmpty() {
+				// Introduction toevoegen aan te sorteren lijst
+				introductionList = append(introductionList, worker)
+			}
+
 			if worker.WantsToGetUp() {
 				worker.Sleeping = true
 				crawler.SleepingCrawlers.Push(worker)
 			}
 		}
 	}
+
+	cfg.LogInfo("Sorting recrawl timers...")
+	sort.Sort(ByIntroduction(introductionList))
+
+	for _, worker := range introductionList {
+		crawler.AddRecrawlList(worker)
+	}
+
+	next := crawler.GetNextRecrawlDuration()
+	if next == nil {
+		cfg.LogInfo("Next recrawl unknown")
+	} else {
+		cfg.LogInfo(fmt.Sprintf("Next recrawl in %v minutes", next.Minutes()))
+	}
+
 	cfg.LogInfo("Done.")
 
 	return crawler
@@ -248,17 +272,28 @@ func (crawler *Crawler) AddRecrawlList(worker *Hostworker) {
 	worker.InRecrawlList = true
 }
 
-func (crawler *Crawler) CheckRecrawlList() {
+func (crawler *Crawler) CheckRecrawlList(force bool) {
 	if crawler.cfg.LogRecrawlingEnabled {
 		crawler.cfg.LogInfo("Check recrawl list")
 	}
 
+	count := 0
 	for crawler.RecrawlList.First != nil {
-		if crawler.RecrawlList.First.Worker.GetRecrawlDuration() > 0 {
+		if !force && crawler.RecrawlList.First.Worker.GetRecrawlDuration() > 0 {
 			// Lijst is nog niet leeg, maar is nog niet beschikbaar
 			crawler.SetRecrawlFirst(crawler.RecrawlList.First.Worker)
 			break
 		}
+
+		// Bij forceren: maximum 600
+		if force {
+			count++
+			if count > 600 {
+				crawler.SetRecrawlFirst(crawler.RecrawlList.First.Worker)
+				break
+			}
+		}
+
 		// Deze worker moet hercrawled worden
 		worker := crawler.RecrawlList.Pop()
 		worker.InRecrawlList = false
@@ -277,6 +312,14 @@ func (crawler *Crawler) CheckRecrawlList() {
 			}
 		}
 	}
+}
+
+func (crawler *Crawler) GetNextRecrawlDuration() *time.Duration {
+	if crawler.RecrawlList.First == nil {
+		return nil
+	}
+	next := crawler.RecrawlList.First.Worker.GetRecrawlDuration()
+	return &next
 }
 
 func (crawler *Crawler) Panic(str string) {
@@ -396,8 +439,14 @@ func (crawler *Crawler) Start(signal chan int) {
 			crawler.RefreshQueries()
 			crawler.UpdateTimer = time.After(time.Minute * 5)
 
+			// checken of we niet een te lage load hebben, en anders vroegtijdig een recrawl forceren
+			if crawler.SleepingCrawlers.Length() < 100 {
+				crawler.cfg.LogInfo("Too little sleeping crawlers... Starting forced recrawl")
+				crawler.CheckRecrawlList(true)
+			}
+
 		case <-crawler.RecrawlTimer:
-			crawler.CheckRecrawlList()
+			crawler.CheckRecrawlList(false)
 
 			// Zijn er in slaap gebracht die meteen wakker mogen worden gemaakt?
 			crawler.WakeSleepingWorkers()

@@ -39,10 +39,10 @@ func NewTor(daemons, count, max, headerTimeout, requestTimeout int) *Tor {
 			"--HashedControlPassword", "16:118E516CCAA79CF76014434BD85092BE8E34C6D0D7594C2F5D4093F78B",
 
 			// Disable routing
-			//"--ClientOnly", "1",
+			"--ClientOnly", "1",
 			//"--MaxCircuitDirtiness", "300", // Maximum seconden om tor circuit te hergebruiken
 			//"--OnionTrafficOnly", "1", (unsupported)
-			"--SafeSocks", "1", // Voorkom dns leaks (aanvragen met al geresolvede dns worden genegeerd)
+			//"--SafeSocks", "1", // Voorkom dns leaks (aanvragen met al geresolvede dns worden genegeerd)
 		)
 
 		//tor --RunAsDaemon 1 --SocksPort 9150 --ControlPort 9180 --DataDirectory "/tor_dir/tor1" --HashedControlPassword "16:118E516CCAA79CF76014434BD85092BE8E34C6D0D7594C2F5D4093F78B" --ClientOnly 1
