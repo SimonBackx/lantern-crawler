@@ -498,9 +498,13 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				w.sleepAfter = -1
 
 			} else if strings.Contains(str, "Client.Timeout") {
-				w.crawler.speedLogger.LogTimeout()
+				if item.FailCount == 0 {
+					w.crawler.speedLogger.LogTimeout()
+				}
 			} else if strings.Contains(str, "timeout awaiting response headers") {
-				w.crawler.speedLogger.LogTimeout()
+				if item.FailCount == 0 {
+					w.crawler.speedLogger.LogTimeout()
+				}
 			} else if strings.Contains(str, "stopped after 10 redirects") {
 				w.RequestIgnored(item)
 				return
@@ -689,7 +693,7 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 				w.IntroductionPoints.Push(item)
 			} else {
 				// Check of de url een hoofd url is
-				if item.URL.String() == "/" {
+				if item.URL.String() == "/" || item.URL.String() == "" {
 					// todo: misschien tot bepaalde lengte of aantal '/' toestaan?
 					w.IntroductionPoints.Push(item)
 				}

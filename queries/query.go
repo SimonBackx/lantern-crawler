@@ -32,7 +32,7 @@ func (q *Query) Execute(s *Source) *string {
 		return nil
 	}
 
-	var maxLength int = 120
+	var maxLength int = 160
 	characters := maxLength / len(result)
 
 	enddot := true
@@ -52,20 +52,21 @@ func (q *Query) Execute(s *Source) *string {
 			foundStart := start
 			prev := false
 			predot := (i == 0)
-			for i := start; i >= start-margin; i-- {
-				if i <= 0 {
+			for j := start; j >= start-margin; j-- {
+				if j <= 0 {
+					// Op één of andere manier is het mogelijk
 					foundStart = 0
 					predot = false
 					break
 				}
 
-				if s.Text[i] == ' ' {
+				if s.Text[j] == ' ' {
 					if !prev {
-						foundStart = i + 1
+						foundStart = j + 1
 						prev = true
 					}
-				} else if s.Text[i] == '\n' || s.Text[i] == '0' {
-					foundStart = i + 1
+				} else if s.Text[j] == '\n' || s.Text[j] == '0' {
+					foundStart = j + 1
 					predot = false
 					break
 				} else {
@@ -77,21 +78,21 @@ func (q *Query) Execute(s *Source) *string {
 
 			foundEnd := end
 			prev = false
-			for i := end; i <= end+margin; i++ {
-				if i >= len(s.Text) {
+			for j := end; j <= end+margin; j++ {
+				if j >= len(s.Text) {
 					foundEnd = len(s.Text)
 					enddot = false
 					break
 				}
 
-				if s.Text[i] == ' ' {
+				if s.Text[j] == ' ' {
 					if !prev {
-						foundEnd = i
+						foundEnd = j
 						prev = true
 						enddot = true
 					}
-				} else if s.Text[i] == '\n' || s.Text[i] == '0' {
-					foundEnd = i
+				} else if s.Text[j] == '\n' || s.Text[j] == '0' {
+					foundEnd = j
 					enddot = false
 					break
 				} else {
