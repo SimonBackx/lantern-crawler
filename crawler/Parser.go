@@ -98,8 +98,6 @@ func ReadHtml(data []byte, parseUrls bool) *ParseResult {
 			tn, _ := z.TagName()
 
 			if len(tn) == 1 && tn[0] == 'a' {
-				fmt.Println("a tag found")
-
 				if parseUrls {
 					key, val, moreAttr := z.TagAttr()
 					for key != nil {
@@ -108,10 +106,7 @@ func ReadHtml(data []byte, parseUrls bool) *ParseResult {
 
 							attrUrl := ParseUrlFromHref(val)
 							if attrUrl != nil {
-								fmt.Println("href found: " + attrUrl.String())
 								result.Urls = append(result.Urls, attrUrl)
-							} else {
-								fmt.Println("invalid:" + string(val))
 							}
 							break
 						}

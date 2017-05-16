@@ -526,8 +526,6 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 
 	if result.Urls != nil {
 		for _, u := range result.Urls {
-			w.crawler.cfg.LogInfo("Found url " + u.String())
-
 			// Convert links to absolute url
 			ResolveReferenceNoCopy(response.Request.URL, u)
 
