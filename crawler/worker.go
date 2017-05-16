@@ -298,10 +298,6 @@ func (w *Hostworker) Run(client *http.Client) {
 		// Onze crawler terug wakker maken om eventueel een nieuwe request op te starten
 		w.crawler.WorkerEnded.stack(w)
 
-		if w.crawler.cfg.LogGoroutinesEnabled {
-			w.crawler.cfg.LogInfo("Goroutine for host " + w.String() + " stopped")
-		}
-
 	}()
 
 	if w.crawler.cfg.LogGoroutinesEnabled {
@@ -350,9 +346,15 @@ func (w *Hostworker) Run(client *http.Client) {
 }
 
 func (w *Hostworker) Request(item *CrawlItem) {
+
+
 	// todo: . / .. splitten verwijderen in ResolveReference
 	// en misschien meteen string van maken?
 	reqUrl := item.Subdomain.Url.ResolveReference(item.URL)
+	
+	if w.crawler.cfg.LogRequests {
+		w.crawler.cfg.LogInfo("New request " + reqUrl.String())
+	}
 
 	if request, err := http.NewRequest("GET", reqUrl.String(), nil); err == nil {
 		request.Header.Add("User-Agent", "Mozilla/5.0 (Windows NT 6.1; rv:45.0) Gecko/20100101 Firefox/45.0")
@@ -524,29 +526,31 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 
 	if result.Urls != nil {
 		for _, u := range result.Urls {
+			w.crawler.cfg.LogInfo("Found url " + u.String())
+
 			// Convert links to absolute url
 			ResolveReferenceNoCopy(response.Request.URL, u)
 
 			// Url moet absoluut zijn
 			if !u.IsAbs() {
 				panic("Resolve reference didn't make absolute")
-				break
+				continue
 			}
 
 			if !strings.HasPrefix(u.Scheme, "http") || len(u.Host) == 0 {
-				break
+				continue
 			}
 
 			// Host opspliten in subdomein en domein
 			domains := strings.Split(u.Host, ".")
 			if len(domains) < 2 {
-				break
+				continue
 			}
 
 			if w.crawler.cfg.OnlyOnion {
 				tld := domains[len(domains)-1]
 				if tld != "onion" {
-					break
+					continue
 				}
 
 				domain := domains[len(domains)-2]
@@ -556,7 +560,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 					// Ongeldig -> verwijder alle ongeldige characters (tor browser doet dit ook)
 					domain = onionRegexp.ReplaceAllString(domain, "")
 					if len(domain) != 22 {
-						break
+						continue
 					}
 					// Terug samenvoegen
 					domains[len(domains)-2] = domain
@@ -565,12 +569,12 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 			} else {
 				if len(domains[len(domains)-1]) < 2 {
 					// tld te kort
-					break
+					continue
 				}
 
 				if len(domains[len(domains)-2]) < 1 {
 					// domain te kort
-					break
+					continue
 				}
 			}
 
@@ -620,7 +624,10 @@ func (w *Hostworker) RequestStarted(item *CrawlItem) {
 }
 
 func (w *Hostworker) RequestFinished(item *CrawlItem) {
-	//w.crawler.cfg.LogInfo(fmt.Sprintf("Request finished. %v", item.URL.String()))
+	if w.crawler.cfg.LogRequests {
+		w.crawler.cfg.LogInfo("Request finished" + item.URL.String())
+	}
+
 
 	w.FailStreak = 0
 	w.SucceededDownloads++
@@ -655,11 +662,17 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 }
 
 func (w *Hostworker) RequestIgnored(item *CrawlItem) {
+	if w.crawler.cfg.LogRequests {
+		w.crawler.cfg.LogInfo("Request ignored" + item.URL.String())
+	}
+
 	item.Ignore = true
 }
 
 func (w *Hostworker) RequestFailed(item *CrawlItem) {
-	//w.crawler.cfg.LogInfo(fmt.Sprintf("Request failed. %v", item.URL.String()))
+	if w.crawler.cfg.LogRequests {
+		w.crawler.cfg.LogInfo("Request failed" + item.URL.String())
+	}
 
 	item.FailCount++
 

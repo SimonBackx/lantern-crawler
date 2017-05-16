@@ -24,7 +24,7 @@ func run(quit chan bool, finished chan bool) {
 	}
 
 	for _, str := range urls {
-		u, err := url.ParseRequestURI(str)
+		u, err := url.Parse(str)
 		if err == nil {
 			myCrawler.ProcessUrl(u)
 		} else {

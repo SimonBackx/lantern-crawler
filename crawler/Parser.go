@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/SimonBackx/lantern-crawler/queries"
 	"golang.org/x/net/html"
 	"io"
@@ -97,14 +98,20 @@ func ReadHtml(data []byte, parseUrls bool) *ParseResult {
 			tn, _ := z.TagName()
 
 			if len(tn) == 1 && tn[0] == 'a' {
+				fmt.Println("a tag found")
+
 				if parseUrls {
 					key, val, moreAttr := z.TagAttr()
 					for key != nil {
 
 						if string(key) == "href" {
+
 							attrUrl := ParseUrlFromHref(val)
 							if attrUrl != nil {
+								fmt.Println("href found: " + attrUrl.String())
 								result.Urls = append(result.Urls, attrUrl)
+							} else {
+								fmt.Println("invalid:" + string(val))
 							}
 							break
 						}
