@@ -85,13 +85,13 @@ type Hostworker struct {
 	cachedRecrawlOnMemory bool
 
 	// Detecteren van tijdelijk onbeschikbare domeinen
-	// na 10 achtereenvolgende fails zonder eerder voorgaande successvolle
+	// na 10 achtereenvolgende fails zonder successvolle
 	// verhogen we Failstreak. Daarna wachten we een bepaald aantal
 	// dagen, weken, maanden voor we opnieuw proberen afhankelijk van de grootte van FailStreak
 	// Opnieuw proberen doen we enkel als we weer een URL vinden naar dit domein
-
-	FailStreak         int /// Aantal mislukte downloads na elkaar
-	SucceededDownloads int // Aantal successvolle downloads (ooit)
+	FailCount      int /// Aantal mislukte downloads na elkaar
+	FailStreak     int /// Aantal keer dat FailCount > 10
+	LastFailStreak *time.Time
 }
 
 func (w *Hostworker) String() string {
@@ -254,15 +254,25 @@ func (w *Hostworker) NeedsWriteToDisk() bool {
 	}
 	return false
 }
-
-func (w *Hostworker) WantsToGetUp() bool {
-	if !w.InMemory {
-		return w.cachedWantsToGetUp
+func (w *Hostworker) IsInFailTimeout() bool {
+	if w.LastFailStreak == nil {
+		return false
 	}
 
-	if w.FailStreak > 20 && w.SucceededDownloads == 0 {
-		// Passieve modus
+	a := time.Since(*w.LastFailStreak) > 46*time.Hour
+	if a == false {
+		w.LastFailStreak = nil
+	}
+	return a
+
+}
+func (w *Hostworker) WantsToGetUp() bool {
+	if w.IsInFailTimeout() {
 		return false
+	}
+
+	if !w.InMemory {
+		return w.cachedWantsToGetUp
 	}
 
 	result := !w.PriorityQueue.IsEmpty() || !w.Queue.IsEmpty() || !w.LowPriorityQueue.IsEmpty()
@@ -296,10 +306,6 @@ func (w *Hostworker) Recrawl() {
 		return
 	}
 
-	// Goede start - als we recrawlen is ooit een request geslaagd
-	// als het nu niet meer slaagt zal recrawl niet meer gebeuren
-	// maar zal een lang fail interval gestart worden
-	w.FailStreak = 0
 	w.LatestCycle++
 
 	if w.crawler.cfg.LogRecrawlingEnabled {
@@ -520,16 +526,16 @@ func (w *Hostworker) Request(item *CrawlItem) {
 			} else if strings.Contains(str, "context canceled") {
 				// Negeer failcount bij handmatige cancel
 				item.FailCount--
+				w.RequestFailed(item)
+				return
 			}
+
+			w.FailCount++
+			if w.FailCount > 10 {
+				w.NewFailStreak()
+			}
+
 			w.RequestFailed(item)
-
-			// (Client.Timeout exceeded while awaiting headers)
-
-			// tor proxy niet bereikbaar:
-			// Get http://www.scoutswetteren.be: net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)
-
-			// timeout awaiting response headers
-			// request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)
 		}
 	} else {
 
@@ -698,7 +704,8 @@ func (w *Hostworker) RequestFinished(item *CrawlItem) {
 	}
 
 	w.FailStreak = 0
-	w.SucceededDownloads++
+	w.LastFailStreak = nil
+	w.FailCount = 0
 
 	if item.Depth == 0 {
 		// Introduction point toevoegen
@@ -741,24 +748,24 @@ func (w *Hostworker) RequestFailed(item *CrawlItem) {
 	if w.crawler.cfg.LogRequests {
 		w.crawler.cfg.LogInfo("Request failed" + item.URL.String())
 	}
-
 	item.FailCount++
-
-	if item.FailCount == 2 {
-		// 2e poging is ook mislukt
-		w.FailStreak++
-
-		if w.FailStreak > 3 {
-			// Meteen stoppen
-			w.sleepAfter = -1
-		}
-	}
 
 	if !item.IsUnavailable() {
 		// We wagen nog een poging binnen een uurtje
 		// Toevoegen aan failqueue
 		w.FailedQueue.Push(item, item.FailCount)
 	}
+}
+
+func (w *Hostworker) NewFailStreak() {
+	w.FailCount = 0
+	w.FailStreak++
+
+	now := time.Now()
+	w.LastFailStreak = &now
+
+	// Meteen stoppen
+	w.sleepAfter = -1
 }
 
 func (w *Hostworker) GetNextRequest() *CrawlItem {
@@ -835,6 +842,12 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 	// Create copy
 	cc := *foundUrl
 	foundUrl = &cc
+
+	if w.IsInFailTimeout() {
+		// failStreak detecteren en referenties gewoon
+		// wegsmijten als we in timeout interval zitten
+		return nil, nil
+	}
 
 	if !w.InMemory {
 		count := w.NewItems.stack(foundUrl)
@@ -971,33 +984,73 @@ func (w *Hostworker) ReadFromReader(reader *bufio.Reader) bool {
 	}
 	str := string(line)
 	parts := strings.Split(str, "\t")
-	if len(parts) != 5 {
+
+	if len(parts) == 6 {
+		w.Host = parts[0]
+		w.Scheme = parts[1]
+
+		num, err := strconv.Atoi(parts[2])
+		if err != nil {
+			fmt.Println("Invalid failstreak")
+			return false
+		}
+		w.FailStreak = num
+
+		num, err = strconv.Atoi(parts[3])
+		if err != nil {
+			fmt.Println("Invalid FailCount")
+			return false
+		}
+		w.FailCount = num
+
+		lastFail, err := time.Parse(crawlItemTimeFormat, parts[4])
+		if len(parts[4]) > 0 && err != nil {
+			fmt.Println("Invalid LastFailStreak")
+			return false
+		}
+
+		if err == nil {
+			w.LastFailStreak = &lastFail
+		} else {
+			w.LastFailStreak = nil
+		}
+
+		num, err = strconv.Atoi(parts[5])
+		if err != nil {
+			fmt.Println("Invalid LatestCycle")
+			return false
+		}
+		w.LatestCycle = num
+
+	} else if len(parts) == 5 {
+		// Compability without failStreak:
+		w.Host = parts[0]
+		w.Scheme = parts[1]
+
+		num, err := strconv.Atoi(parts[2])
+		if err != nil {
+			fmt.Println("Invalid failstreak")
+			return false
+		}
+		// Failstreak resetten voor huidig systeem
+		w.FailStreak = 0
+
+		num, err = strconv.Atoi(parts[3])
+		if err != nil {
+			fmt.Println("Invalid SucceededDownloads")
+			return false
+		}
+		// SucceededDownloads bestaat niet meer
+
+		num, err = strconv.Atoi(parts[4])
+		if err != nil {
+			fmt.Println("Invalid LatestCycle")
+			return false
+		}
+		w.LatestCycle = num
+	} else {
 		return false
 	}
-
-	w.Host = parts[0]
-	w.Scheme = parts[1]
-
-	num, err := strconv.Atoi(parts[2])
-	if err != nil {
-		fmt.Println("Invalid failstreak")
-		return false
-	}
-	w.FailStreak = num
-
-	num, err = strconv.Atoi(parts[3])
-	if err != nil {
-		fmt.Println("Invalid SucceededDownloads")
-		return false
-	}
-	w.SucceededDownloads = num
-
-	num, err = strconv.Atoi(parts[4])
-	if err != nil {
-		fmt.Println("Invalid LatestCycle")
-		return false
-	}
-	w.LatestCycle = num
 
 	// Subdomains
 	line, _, _ = reader.ReadLine()
@@ -1035,11 +1088,12 @@ func (w *Hostworker) ReadFromReader(reader *bufio.Reader) bool {
 
 func (w *Hostworker) SaveToWriter(writer *bufio.Writer) {
 	str := fmt.Sprintf(
-		"%s	%s	%v	%v	%v\n",
+		"%s	%s	%v	%v	%s	%v\n",
 		w.Host,
 		w.Scheme,
 		w.FailStreak,
-		w.SucceededDownloads,
+		w.FailCount,
+		TimeToString(w.LastFailStreak),
 		w.LatestCycle,
 	)
 	writer.WriteString(str)
@@ -1084,14 +1138,22 @@ func (w *Hostworker) IsEqual(b *Hostworker) bool {
 	}
 
 	if w.FailStreak != b.FailStreak {
+		fmt.Println("FailStreak wrong")
 		return false
 	}
 
-	if w.SucceededDownloads != b.SucceededDownloads {
+	if w.FailCount != b.FailCount {
+		fmt.Println("failcount wrong")
+		return false
+	}
+
+	if !(w.LastFailStreak == nil && b.LastFailStreak == nil) && (w.LastFailStreak == nil || b.LastFailStreak == nil || w.LastFailStreak.Equal(*b.LastFailStreak)) {
+		fmt.Println("LastFailStreak wrong")
 		return false
 	}
 
 	if w.LatestCycle != b.LatestCycle {
+		fmt.Println("LatestCycle wrong")
 		return false
 	}
 
