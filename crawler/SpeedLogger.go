@@ -71,13 +71,13 @@ func (logger *SpeedLogger) Run() {
 		}
 
 		// check memory (maximum 1Gb)
-		if memorySys > 1000000 {
+		if memoryAlloc > 900000 {
 			logger.Crawler.distributor.DecreaseClients()
 		} else {
 			// Als er veel timeouts zijn -> vertragen
 			if logger.Timeouts > logger.Crawler.cfg.MaxTimeouts && logger.Crawler.distributor.AvailableClients() >= 0 {
 				logger.Crawler.distributor.DecreaseClients()
-			} else if logger.Timeouts < logger.Crawler.cfg.MinTimeouts && logger.Crawler.distributor.AvailableClients() == 0 && memorySys < 950000 {
+			} else if logger.Timeouts < logger.Crawler.cfg.MinTimeouts && logger.Crawler.distributor.AvailableClients() == 0 && memoryAlloc < 700000 {
 				logger.Crawler.distributor.IncreaseClients()
 			}
 		}

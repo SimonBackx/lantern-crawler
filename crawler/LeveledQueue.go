@@ -11,7 +11,7 @@ type LeveledQueue struct {
 func NewLeveledQueue() *LeveledQueue {
 	lvls := make([]*CrawlQueue, maxFailCount+1)
 	for i := 0; i <= maxFailCount; i++ {
-		lvls[i] = NewCrawlQueue("Leveled queue")
+		lvls[i] = NewCrawlQueue("failqueue")
 	}
 	return &LeveledQueue{Levels: lvls}
 }
@@ -34,7 +34,7 @@ func (r *LeveledQueue) Pop() *CrawlItem {
 
 func (r *LeveledQueue) First() *CrawlItem {
 	for _, queue := range r.Levels {
-		if queue.First != nil {
+		if queue.First != nil && queue.First.NeedsRetry() {
 			return queue.First
 		}
 	}
@@ -53,7 +53,7 @@ func (l *LeveledQueue) IsEqual(b *LeveledQueue) bool {
 
 func (l *LeveledQueue) ReadFromReader(reader *bufio.Reader, subdomains []*Subdomain) {
 	for i := 0; i <= maxFailCount; i++ {
-		queue := NewCrawlQueue("Leveled queue")
+		queue := NewCrawlQueue("failqueue")
 		queue.ReadFromReader(reader, subdomains)
 		l.Levels[i] = queue
 	}

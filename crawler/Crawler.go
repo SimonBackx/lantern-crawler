@@ -131,8 +131,13 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 			crawler.Workers[worker.Host] = worker
 
 			if worker.cachedLastDownload != nil {
-				// Introduction toevoegen aan te sorteren lijst
-				introductionList = append(introductionList, worker)
+				if cfg.ForceRecrawl {
+					worker.Recrawl()
+				} else {
+					// Introduction toevoegen aan te sorteren lijst
+					introductionList = append(introductionList, worker)
+				}
+
 			}
 
 			if worker.WantsToGetUp() {

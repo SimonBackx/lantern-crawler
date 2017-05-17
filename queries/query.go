@@ -45,7 +45,12 @@ func (q *Query) Execute(s *Source) *string {
 
 		start := resultIndexes[0]
 		end := resultIndexes[1]
+
+		if end < start {
+			start, end = end, start
+		}
 		length := end - start
+
 		margin := (characters - length) / 2
 
 		if margin > 0 {
@@ -53,10 +58,15 @@ func (q *Query) Execute(s *Source) *string {
 			prev := false
 			predot := (i == 0)
 			for j := start; j >= start-margin; j-- {
-				if j <= 0 || j >= len(s.Text) {
-					// Op één of andere manier is het mogelijk
+				if j <= 0 {
 					foundStart = 0
 					predot = false
+					break
+				}
+
+				if j >= len(s.Text) {
+					// Op één of andere manier is dit mogelijk
+					foundStart = len(s.Text) - 1
 					break
 				}
 
@@ -111,6 +121,11 @@ func (q *Query) Execute(s *Source) *string {
 			if end > len(s.Text) {
 				end = len(s.Text)
 			}
+		}
+
+		if end > start+characters {
+			// Bugfix?
+			end = start + characters
 		}
 
 		buffer.Write(s.Text[start:end])

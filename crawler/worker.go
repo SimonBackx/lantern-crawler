@@ -67,9 +67,6 @@ type Hostworker struct {
 	InRecrawlList   bool
 	RecrawlOnFinish bool // Enkel aanpassen of opvragen buiten de goroutine v/d worker
 
-	FailStreak         int /// Aantal mislukte downloads na elkaar
-	SucceededDownloads int // Aantal successvolle downloads (ooit)
-
 	Client   *http.Client
 	stop     chan struct{}
 	NewItems popChannel
@@ -86,6 +83,15 @@ type Hostworker struct {
 	cachedWantsToGetUp    bool
 	cachedLastDownload    *time.Time
 	cachedRecrawlOnMemory bool
+
+	// Detecteren van tijdelijk onbeschikbare domeinen
+	// na 10 achtereenvolgende fails zonder eerder voorgaande successvolle
+	// verhogen we Failstreak. Daarna wachten we een bepaald aantal
+	// dagen, weken, maanden voor we opnieuw proberen afhankelijk van de grootte van FailStreak
+	// Opnieuw proberen doen we enkel als we weer een URL vinden naar dit domein
+
+	FailStreak         int /// Aantal mislukte downloads na elkaar
+	SucceededDownloads int // Aantal successvolle downloads (ooit)
 }
 
 func (w *Hostworker) String() string {
@@ -266,10 +272,10 @@ func (w *Hostworker) WantsToGetUp() bool {
 
 	// Misschien hebben we een item in de failed queue die er al uit mag komen?
 	failedItem := w.FailedQueue.First()
-	if failedItem != nil {
-		if failedItem.NeedsRetry() {
-			return true
-		}
+	if failedItem != nil && failedItem.FailCount < 2 {
+		// Enkel requests starten met kleine kans op falen
+		// de rest alleen starten als restjes
+		return true
 	}
 	return false
 }
@@ -298,10 +304,6 @@ func (w *Hostworker) Recrawl() {
 
 	if w.crawler.cfg.LogRecrawlingEnabled {
 		w.crawler.cfg.LogInfo("Recrawl initiated for " + w.String())
-	}
-
-	if !w.PriorityQueue.IsEmpty() {
-		w.crawler.cfg.Log("warning", "Recrawl initiated before priority queue became empty")
 	}
 
 	item := w.IntroductionPoints.Pop()
@@ -642,13 +644,26 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 	}
 
 	// Kritieke move operatie uitvoeren noodzakelijk?
-	if w.crawler.GetDomainForUrl(strings.Split(item.URL.Host, ".")) != w.Host {
+	splitted := strings.Split(item.URL.Host, ".")
+	if w.crawler.GetDomainForUrl(splitted) != w.Host {
 		// Kopie maken van volledige absolute url en dan pas relatief maken
 		cc := *item.URL
 		makeRelative(item.URL)
 
 		// Negeren vanaf nu voor deze worker
 		w.RequestIgnored(item)
+
+		// Is dit wel een onion, anders weg smijten
+		if w.crawler.cfg.OnlyOnion {
+			if len(splitted) < 2 {
+				return false
+			}
+
+			tld := splitted[len(splitted)-1]
+			if tld != "onion" {
+				return false
+			}
+		}
 
 		// Doorgeven aan crawler en aan juiste worker bezorgen voor verdere afhandeling?
 		workerResult.Append(&cc)
@@ -750,7 +765,7 @@ func (w *Hostworker) GetNextRequest() *CrawlItem {
 
 	f := w.FailedQueue.First()
 
-	if f != nil && f.FailCount < 3 {
+	if f != nil && f.FailCount < 2 {
 		f = w.FailedQueue.Pop()
 		return f
 	}
@@ -875,6 +890,10 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 			// dat weten we omdat we deze al eerder hebben gecrawled
 			return item, nil
 		}
+
+		if item.FailCount > 0 && !item.NeedsRetry() {
+			return item, nil
+		}
 	}
 
 	// Depth aanpassen
@@ -918,6 +937,15 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 			} else {
 				w.LowPriorityQueue.Push(item)
 			}
+		}
+	} else if item.Queue != nil && item.Queue.Name == "failqueue" {
+		// Switch uitvoeren
+		item.Remove()
+
+		if item.Depth < maxRecrawlDepth {
+			w.PriorityQueue.Push(item)
+		} else {
+			w.LowPriorityQueue.Push(item)
 		}
 	}
 

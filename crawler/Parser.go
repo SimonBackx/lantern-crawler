@@ -89,7 +89,7 @@ func ReadHtml(data []byte, parseUrls bool) *ParseResult {
 			if title_depth == 1 {
 				// kopie maken
 				title = string(z.Text())
-				result.Title = &title
+				result.Title = queries.CleanString(&title)
 			}
 
 		// Links detecteren
