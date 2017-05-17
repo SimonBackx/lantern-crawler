@@ -53,7 +53,7 @@ func (q *Query) Execute(s *Source) *string {
 			prev := false
 			predot := (i == 0)
 			for j := start; j >= start-margin; j-- {
-				if j <= 0 {
+				if j <= 0 || j >= len(s.Text) {
 					// Op één of andere manier is het mogelijk
 					foundStart = 0
 					predot = false

@@ -144,6 +144,12 @@ func (w *Hostworker) MoveToDisk() {
 /// Move out of memory without save to file
 func (w *Hostworker) HardReset() {
 	w.cachedWantsToGetUp = w.WantsToGetUp()
+	if w.IntroductionPoints.IsEmpty() {
+		w.cachedLastDownload = nil
+	} else {
+		w.cachedLastDownload = w.IntroductionPoints.First.LastDownload
+	}
+
 	w.InMemory = false
 	w.IntroductionPoints = nil
 	w.Subdomains = nil
@@ -298,14 +304,12 @@ func (w *Hostworker) Recrawl() {
 		w.crawler.cfg.Log("warning", "Recrawl initiated before priority queue became empty")
 	}
 
-	item := w.IntroductionPoints.First
+	item := w.IntroductionPoints.Pop()
 	for item != nil {
 		item.Cycle = w.LatestCycle
-		next := item.Next
-		item.Remove()
 		w.PriorityQueue.Push(item)
 
-		item = next
+		item = w.IntroductionPoints.Pop()
 	}
 }
 

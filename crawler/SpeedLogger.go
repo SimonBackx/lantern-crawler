@@ -35,9 +35,7 @@ func (logger *SpeedLogger) Run() {
 
 		var requests float64 = float64(logger.Count)
 		workers := logger.Crawler.distributor.UsedClients()
-
 		domains := len(logger.Crawler.Workers)
-		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v requests, %v workers, %v domains, %v sleeping", requests, workers, domains, logger.Crawler.SleepingCrawlers.Length()))
 
 		downloadSpeed := int(float64(logger.DownloadSize) / 60 / 1024) // * 6
 		downloadSize := 0
@@ -48,17 +46,29 @@ func (logger *SpeedLogger) Run() {
 			downloadTime = int(logger.DownloadTime.Seconds() * 1000 / float64(logger.Count))
 		}
 
-		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v KB/s, %v KB/page, %v ms/page, %v timeouts",
+		runtime.ReadMemStats(&m)
+		memoryAlloc := m.Alloc / 1024
+		memorySys := m.Sys / 1024
+
+		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("%v requests, %v workers, %v domains, %v sleeping, %v KB/s, %v KB/page, %v ms/page, %v timeouts, %v KB alloc, %v KB sys",
+			requests,
+			workers,
+			domains,
+			logger.Crawler.SleepingCrawlers.Length(),
 			downloadSpeed,
 			downloadSize,
 			downloadTime,
 			logger.Timeouts,
+			memoryAlloc,
+			memorySys,
 		))
 
-		runtime.ReadMemStats(&m)
-		memoryAlloc := m.Alloc / 1024
-		memorySys := m.Sys / 1024
-		logger.Crawler.cfg.Log("Stat", fmt.Sprintf("Alloc = %v KB, Sys = %v KB", memoryAlloc, memorySys))
+		next := logger.Crawler.GetNextRecrawlDuration()
+		if next == nil {
+			logger.Crawler.cfg.LogInfo("Next recrawl unknown")
+		} else {
+			logger.Crawler.cfg.LogInfo(fmt.Sprintf("Next recrawl in %v minutes", next.Minutes()))
+		}
 
 		// Als er veel timeouts zijn -> vertragen
 		if logger.Timeouts > logger.Crawler.cfg.MaxTimeouts && logger.Crawler.distributor.AvailableClients() >= 0 {

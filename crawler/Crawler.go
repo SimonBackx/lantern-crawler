@@ -113,6 +113,7 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 		}
 
 		worker := NewHostWorkerFromFile(file, crawler)
+		// worker niet meer in memory!!
 		file.Close()
 
 		if worker != nil {
@@ -129,7 +130,7 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 			}
 			crawler.Workers[worker.Host] = worker
 
-			if !worker.IntroductionPoints.IsEmpty() {
+			if worker.cachedLastDownload != nil {
 				// Introduction toevoegen aan te sorteren lijst
 				introductionList = append(introductionList, worker)
 			}
