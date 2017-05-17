@@ -70,11 +70,16 @@ func (logger *SpeedLogger) Run() {
 			logger.Crawler.cfg.LogInfo(fmt.Sprintf("Next recrawl in %v minutes", next.Minutes()))
 		}
 
-		// Als er veel timeouts zijn -> vertragen
-		if logger.Timeouts > logger.Crawler.cfg.MaxTimeouts && logger.Crawler.distributor.AvailableClients() >= 0 {
+		// check memory (maximum 1Gb)
+		if memorySys > 1000000 {
 			logger.Crawler.distributor.DecreaseClients()
-		} else if logger.Timeouts < logger.Crawler.cfg.MinTimeouts && logger.Crawler.distributor.AvailableClients() == 0 {
-			logger.Crawler.distributor.IncreaseClients()
+		} else {
+			// Als er veel timeouts zijn -> vertragen
+			if logger.Timeouts > logger.Crawler.cfg.MaxTimeouts && logger.Crawler.distributor.AvailableClients() >= 0 {
+				logger.Crawler.distributor.DecreaseClients()
+			} else if logger.Timeouts < logger.Crawler.cfg.MinTimeouts && logger.Crawler.distributor.AvailableClients() == 0 && memorySys < 950000 {
+				logger.Crawler.distributor.IncreaseClients()
+			}
 		}
 
 		stats := queries.NewStats(logger.Count, logger.Timeouts, workers, domains, downloadSpeed, downloadTime, downloadSize, memoryAlloc, memorySys)
