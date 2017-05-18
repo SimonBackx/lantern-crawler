@@ -63,13 +63,6 @@ func (logger *SpeedLogger) Run() {
 			memorySys,
 		))
 
-		next := logger.Crawler.GetNextRecrawlDuration()
-		if next == nil {
-			logger.Crawler.cfg.LogInfo("Next recrawl unknown")
-		} else {
-			logger.Crawler.cfg.LogInfo(fmt.Sprintf("Next recrawl in %v minutes", next.Minutes()))
-		}
-
 		// check memory (maximum 1Gb)
 		if memoryAlloc > 900000 {
 			logger.Crawler.distributor.DecreaseClients()
@@ -77,7 +70,7 @@ func (logger *SpeedLogger) Run() {
 			// Als er veel timeouts zijn -> vertragen
 			if logger.Timeouts > logger.Crawler.cfg.MaxTimeouts && logger.Crawler.distributor.AvailableClients() >= 0 {
 				logger.Crawler.distributor.DecreaseClients()
-			} else if logger.Timeouts < logger.Crawler.cfg.MinTimeouts && logger.Crawler.distributor.AvailableClients() == 0 && memoryAlloc < 700000 {
+			} else if logger.Timeouts < logger.Crawler.cfg.MinTimeouts && logger.Crawler.distributor.AvailableClients() == 0 && memoryAlloc < 800000 {
 				logger.Crawler.distributor.IncreaseClients()
 			}
 		}

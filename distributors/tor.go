@@ -73,6 +73,9 @@ func NewTor(daemons, count, max, headerTimeout, requestTimeout int) *Tor {
 		})
 	}
 
+	// Wachten
+	time.Sleep(10 * time.Second)
+
 	return &Tor{Clients: Clients, Count: count, MaxCount: max}
 }
 

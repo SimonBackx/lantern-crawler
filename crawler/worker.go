@@ -193,14 +193,14 @@ func (w *Hostworker) MoveToMemory() {
 func (w *Hostworker) GetRecrawlDuration() time.Duration {
 	if !w.InMemory {
 		if w.cachedLastDownload == nil {
-			panic("GetRecrawlDuration on worker with empty IntroductionPoints (disk)!")
+			w.crawler.cfg.Log("error", "GetRecrawlDuration on worker with empty IntroductionPoints (disk)!")
 			return time.Minute * 5
 		}
 		return time.Hour*12 - time.Since(*w.cachedLastDownload)
 	}
 
 	if w.IntroductionPoints.IsEmpty() {
-		w.crawler.Panic("GetRecrawlDuration on worker with empty IntroductionPoints!")
+		w.crawler.cfg.Log("error", "GetRecrawlDuration on worker with empty IntroductionPoints!")
 		return time.Minute * 5
 	}
 	return time.Hour*12 - time.Since(*w.IntroductionPoints.First.LastDownload)
@@ -259,7 +259,7 @@ func (w *Hostworker) IsInFailTimeout() bool {
 		return false
 	}
 
-	a := time.Since(*w.LastFailStreak) > 46*time.Hour
+	a := time.Since(*w.LastFailStreak) < 46*time.Hour
 	if a == false {
 		w.LastFailStreak = nil
 	}
