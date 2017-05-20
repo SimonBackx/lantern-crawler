@@ -18,7 +18,28 @@ func run(quit chan bool, finished chan bool) {
 
 	var urls []string
 	if conf.OnlyOnion {
-		urls = []string{"http://torlinkbgs6aabns.onion/", "http://zqktlwi4fecvo6ri.onion/wiki/index.php/Main_Page", "http://w363zoq3ylux5rf5.onion/"}
+		urls = []string{
+			"http://torlinkbgs6aabns.onion/",
+			"http://zqktlwi4fecvo6ri.onion/wiki/index.php/Main_Page",
+			"http://w363zoq3ylux5rf5.onion/",
+			"http://qzbkwswfv5k2oj5d.onion/",
+			"http://acropolhwczbgbkh.onion/",
+			"http://rhe4faeuhjs4ldc5.onion/",
+			"http://s6cco2jylmxqcdeh.onion/",
+			"http://s6cco2jylmxqcdeh.onion/",
+			"http://eg63fcmp7l7t4vzj.onion/",
+			"http://csmania3ljzhig4p.onion/",
+			"http://destinysk4bhghnd.onion/",
+			"http://hackslciome4eshp.onion/",
+			"http://skgmctqnhyvfava3.onion/",
+			"http://ogatl57cbva6tncg.onion/",
+			"http://flibustahezeous3.onion/",
+			"http://aet7lmoi4advnqhy.onion/",
+			"http://zeroerfjaacldxzf.onion/",
+			"http://hackcanl2o4lvmnv.onion/",
+			"http://answerstedhctbek.onion/",
+			"http://fcnwebggxt2d3h64.onion/",
+		}
 	} else {
 		urls = []string{"http://www.startpagina.nl"}
 	}

@@ -17,6 +17,7 @@ type Result struct {
 	Title       *string   `json:"title" bson:"title"`
 	Host        *string   `json:"host" bson:"host"`
 	Snippet     *string   `json:"snippet" bson:"snippet"`
+	Category    string    `json:"category" bson:"category"`
 }
 
 func NewResult(query Query, url, host, body, title, snippet *string) *Result {

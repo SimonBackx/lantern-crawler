@@ -17,15 +17,15 @@ import (
 )
 
 const maxRecrawlDepth = 3
-const maxCrawlDepth = 20
-const maxFileSize = 1000000
+const maxCrawlDepth = 40
+const maxFileSize = 2000000
 
 var onionRegexp = regexp.MustCompile("[^a-zA-Z2-7]+")
 
 type Subdomain struct {
-	Url           *url.URL
-	Index         int
-	AlreadyVisted map[string]*CrawlItem
+	Url          *url.URL
+	Index        int
+	AlreadyFound map[string]*CrawlItem
 }
 
 type Hostworker struct {
@@ -128,7 +128,7 @@ func NewHostWorkerFromFile(file *os.File, crawler *Crawler) *Hostworker {
 }
 
 func (w *Hostworker) MoveToDisk() {
-	w.cachedWantsToGetUp = w.WantsToGetUp()
+	w.cachedWantsToGetUp = w.wantsToGetUp()
 	if w.IntroductionPoints.IsEmpty() {
 		w.cachedLastDownload = nil
 	} else {
@@ -259,13 +259,13 @@ func (w *Hostworker) IsInFailTimeout() bool {
 		return false
 	}
 
-	a := time.Since(*w.LastFailStreak) < 46*time.Hour
+	a := time.Since(*w.LastFailStreak) < time.Hour*time.Duration(w.FailStreak*w.FailStreak)/2
 	if a == false {
 		w.LastFailStreak = nil
 	}
 	return a
-
 }
+
 func (w *Hostworker) WantsToGetUp() bool {
 	if w.IsInFailTimeout() {
 		return false
@@ -275,6 +275,10 @@ func (w *Hostworker) WantsToGetUp() bool {
 		return w.cachedWantsToGetUp
 	}
 
+	return w.wantsToGetUp()
+}
+
+func (w *Hostworker) wantsToGetUp() bool {
 	result := !w.PriorityQueue.IsEmpty() || !w.Queue.IsEmpty() || !w.LowPriorityQueue.IsEmpty()
 	if result {
 		return true
@@ -282,7 +286,7 @@ func (w *Hostworker) WantsToGetUp() bool {
 
 	// Misschien hebben we een item in de failed queue die er al uit mag komen?
 	failedItem := w.FailedQueue.First()
-	if failedItem != nil && failedItem.FailCount < 2 {
+	if failedItem != nil && failedItem.FailCount < 4 {
 		// Enkel requests starten met kleine kans op falen
 		// de rest alleen starten als restjes
 		return true
@@ -415,9 +419,8 @@ func (w *Hostworker) Request(item *CrawlItem) {
 
 				// Special exceptions
 				if response.StatusCode == 429 {
-					w.sleepAfter = -1
 					w.crawler.cfg.Log("WARNING", "Too many requests for host "+w.String())
-					item.FailCount--
+					w.NewFailStreak()
 					w.RequestFailed(item)
 					return
 				}
@@ -530,15 +533,17 @@ func (w *Hostworker) Request(item *CrawlItem) {
 				return
 			}
 
-			w.FailCount++
-			if w.FailCount > 10 {
-				w.NewFailStreak()
+			if item.FailCount == 0 {
+				w.FailCount++
+				if w.FailCount > 40 {
+					w.NewFailStreak()
+				}
 			}
 
 			w.RequestFailed(item)
 		}
 	} else {
-
+		w.crawler.cfg.LogError(err)
 		w.RequestFailed(item)
 	}
 
@@ -556,7 +561,7 @@ func (w *Hostworker) ProcessResponse(item *CrawlItem, response *http.Response, r
 			w.RequestIgnored(item)
 			return false
 		}
-
+		w.crawler.speedLogger.LogTimeout()
 		w.RequestFailed(item)
 		return false
 	}
@@ -867,7 +872,7 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 
 	if !subdomainFound {
 		subdomainUrl := splitUrlRelative(foundUrl)
-		subdomain = &Subdomain{Url: subdomainUrl, AlreadyVisted: make(map[string]*CrawlItem)}
+		subdomain = &Subdomain{Url: subdomainUrl, AlreadyFound: make(map[string]*CrawlItem)}
 		w.Subdomains[subdomainUrl.Host] = subdomain
 	} else {
 		makeRelative(foundUrl)
@@ -877,7 +882,7 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 	uri := cleanURLPath(foundUrl)
 
 	if subdomainFound {
-		item, found = subdomain.AlreadyVisted[uri]
+		item, found = subdomain.AlreadyFound[uri]
 	}
 
 	if !found {
@@ -896,7 +901,7 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 			}
 		}
 
-		subdomain.AlreadyVisted[uri] = item
+		subdomain.AlreadyFound[uri] = item
 	} else {
 		if item.IsUnavailable() {
 			// Deze url is onbereikbaar, ofwel geen HTML bestand
@@ -1061,7 +1066,7 @@ func (w *Hostworker) ReadFromReader(reader *bufio.Reader) bool {
 			fmt.Println("Fout bij lezen subdomains")
 			return false
 		}
-		subdomain := &Subdomain{Url: u, AlreadyVisted: make(map[string]*CrawlItem)}
+		subdomain := &Subdomain{Url: u, AlreadyFound: make(map[string]*CrawlItem)}
 		w.Subdomains[u.Host] = subdomain
 		subdomains = append(subdomains, subdomain)
 		line, _, _ = reader.ReadLine()
@@ -1118,7 +1123,7 @@ func (w *Hostworker) SaveToWriter(writer *bufio.Writer) {
 
 	// Nu de rest opslaan
 	for _, subdomain := range w.Subdomains {
-		for _, item := range subdomain.AlreadyVisted {
+		for _, item := range subdomain.AlreadyFound {
 			if item.Queue == nil {
 				// Staat in geen andere queue
 				writer.WriteString(item.SaveToString())
@@ -1187,12 +1192,12 @@ func (w *Hostworker) IsEqual(b *Hostworker) bool {
 			return false
 		}
 
-		if len(subdomain.AlreadyVisted) != len(otherSub.AlreadyVisted) {
+		if len(subdomain.AlreadyFound) != len(otherSub.AlreadyFound) {
 			return false
 		}
 
-		for key, value := range subdomain.AlreadyVisted {
-			other, found := otherSub.AlreadyVisted[key]
+		for key, value := range subdomain.AlreadyFound {
+			other, found := otherSub.AlreadyFound[key]
 			if !found {
 				return false
 			}

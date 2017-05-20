@@ -24,13 +24,14 @@ type CrawlerConfig struct {
 	SleepTime       int
 	SleepTimeRandom int
 
-	LogRecrawlingEnabled bool
-	LogGoroutinesEnabled bool
-	LogRequests          bool
-	LogNetwork           bool
-	HeaderTimeout        int
-	RequestTimeout       int
-	ForceRecrawl         bool
+	LogRecrawlingEnabled  bool
+	LogGoroutinesEnabled  bool
+	LogRequests           bool
+	LogNetwork            bool
+	HeaderTimeout         int
+	RequestTimeout        int
+	ForceRecrawl          bool
+	ResetFailStreakOnLoad bool
 }
 
 func (cfg *CrawlerConfig) LogError(err error) {
@@ -64,11 +65,12 @@ func ConfigFromFile() *CrawlerConfig {
 		SleepTime:        4000,
 		SleepTimeRandom:  4000,
 
-		LogRecrawlingEnabled: false,
-		LogGoroutinesEnabled: false,
-		LogRequests:          false,
-		LogNetwork:           false,
-		ForceRecrawl:         false,
+		LogRecrawlingEnabled:  false,
+		LogGoroutinesEnabled:  false,
+		LogRequests:           false,
+		LogNetwork:            false,
+		ForceRecrawl:          false,
+		ResetFailStreakOnLoad: false,
 
 		HeaderTimeout:  30,
 		RequestTimeout: 45,
@@ -126,5 +128,13 @@ func (cfg *CrawlerConfig) Describe() {
 
 	if cfg.LogGoroutinesEnabled {
 		cfg.LogInfo("LogGoroutinesEnabled")
+	}
+
+	if cfg.ResetFailStreakOnLoad {
+		cfg.LogInfo("ResetFailStreakOnLoad")
+	}
+
+	if cfg.ForceRecrawl {
+		cfg.LogInfo("ForceRecrawl")
 	}
 }

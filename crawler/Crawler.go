@@ -116,6 +116,11 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 		// worker niet meer in memory!!
 		file.Close()
 
+		if cfg.ResetFailStreakOnLoad {
+			worker.FailCount = 0
+			worker.LastFailStreak = nil
+		}
+
 		if worker != nil {
 			splitted := strings.Split(worker.Host, ".")
 
@@ -291,10 +296,10 @@ func (crawler *Crawler) CheckRecrawlList(force bool) {
 			break
 		}
 
-		// Bij forceren: maximum 600
+		// Bij forceren: maximum 6000
 		if force {
 			count++
-			if count > 600 {
+			if count > 6000 {
 				crawler.SetRecrawlFirst(crawler.RecrawlList.First.Worker)
 				break
 			}
@@ -450,6 +455,18 @@ func (crawler *Crawler) Start(signal chan int) {
 				crawler.cfg.LogInfo("Too little sleeping crawlers... Starting forced recrawl")
 				crawler.CheckRecrawlList(true)
 			}
+
+			crawler.cfg.LogInfo("Checking workers...")
+			for _, worker := range crawler.Workers {
+				if !worker.Running && !worker.Sleeping {
+					if worker.WantsToGetUp() {
+						worker.Sleeping = true
+						crawler.SleepingCrawlers.Push(worker)
+					}
+				}
+			}
+
+			crawler.WakeSleepingWorkers()
 
 		case <-crawler.RecrawlTimer:
 			crawler.CheckRecrawlList(false)

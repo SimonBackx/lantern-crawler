@@ -176,7 +176,7 @@ func NewCrawlItemFromString(str *string, subdomains []*Subdomain) *CrawlItem {
 		Subdomain:           subdomain,
 	}
 
-	subdomain.AlreadyVisted[cleanURLPath(u)] = item
+	subdomain.AlreadyFound[cleanURLPath(u)] = item
 
 	return item
 }
