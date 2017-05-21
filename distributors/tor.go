@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"golang.org/x/net/proxy"
 	"io/ioutil"
+	"math"
 	"net/http"
 	"os/exec"
 	"time"
@@ -96,14 +97,14 @@ func (dist *Tor) FreeClient(client *http.Client) {
 }
 
 func (dist *Tor) DecreaseClients() {
-	if dist.Count < 10 {
-		return
-	}
 	dist.Count = int(float64(dist.Count) * 0.8)
+	if dist.Count < 1 {
+		dist.Count = 1
+	}
 }
 
 func (dist *Tor) IncreaseClients() {
-	dist.Count = int(float64(dist.Count) * 1.05)
+	dist.Count += int(math.Ceil(float64(dist.Count) * 0.05))
 	if dist.Count > dist.MaxCount {
 		dist.Count = dist.MaxCount
 	}
