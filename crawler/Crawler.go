@@ -145,7 +145,9 @@ func NewCrawler(cfg *CrawlerConfig) *Crawler {
 
 			}
 
-			if worker.WantsToGetUp() {
+			if worker.FailStreak < 2 && worker.WantsToGetUp() {
+				// We gaan worker met een FailStreak nooit handmatig opstarten,
+				// enkel als we opnieuw een referentie naar de pagina vinden
 				worker.Sleeping = true
 				crawler.SleepingCrawlers.Push(worker)
 			}

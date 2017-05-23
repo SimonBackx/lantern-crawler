@@ -10,7 +10,7 @@ output['running'] = False
 env.gateway = "ubuntu@lantrn.xyz"
 env.key_filename=['lantern_rsa']
 
-env.hosts = ["ubuntu@172.26.13.178"]
+env.hosts = ["ubuntu@172.26.1.214"]
 
 def deploy():
     build()

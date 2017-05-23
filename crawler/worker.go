@@ -957,7 +957,7 @@ func (w *Hostworker) NewReference(foundUrl *url.URL, sourceItem *CrawlItem, inte
 			}
 		}
 	} else if item.Queue != nil && item.Queue.Name == "failqueue" {
-		// Switch uitvoeren
+		// Uit huidige wachtrij verwijderen
 		item.Remove()
 
 		if item.Depth < maxRecrawlDepth {
